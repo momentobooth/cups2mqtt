@@ -1,5 +1,8 @@
 pub mod ipp_client;
+pub mod config;
 
 fn main() {
-    println!("Hello, world!");
+    let settings = config::loading::load_config();
+
+    println!("Hello, world!")
 }
