@@ -1,8 +1,24 @@
 use std::{collections::HashMap, io::Cursor};
 use chrono::DateTime;
 use ipp::prelude::*;
+use url::Url;
+
+use crate::config::models::Cups;
 
 use super::models::{*};
+
+fn build_cups_url(cups_settings: &Cups, queue_id: Option<String>) -> String {
+    let mut cups_url = Url::parse(&cups_settings.uri).unwrap();
+    if !cups_settings.username.is_empty() && !cups_settings.password.is_empty() {
+        cups_url.set_username(&cups_settings.username).unwrap();
+        cups_url.set_password(Some(&cups_settings.password)).unwrap();
+    }
+
+    match queue_id {
+        Some(queue_id) => cups_url.join("printers/").unwrap().join(&queue_id).unwrap(),
+        None => cups_url,
+    }.to_string()
+}
 
 /// Send an IPP request to do `op` to the given `uri` and get the response.
 ///

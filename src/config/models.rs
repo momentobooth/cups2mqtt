@@ -7,48 +7,48 @@ use serde_derive::Deserialize;
 #[derive(Debug, Deserialize)]
 #[allow(unused)]
 pub struct Mqtt {
-    host: String,
-    port: u16,
-    secure: bool,
+    pub host: String,
+    pub port: u16,
+    pub secure: bool,
     #[serde(alias = "ignoretlserrors")]
-    ignore_tls_errors: bool,
-    username: String,
-    password: String,
+    pub ignore_tls_errors: bool,
+    pub username: String,
+    pub password: String,
     #[serde(alias = "clientid")]
-    client_id: String,
+    pub client_id: String,
     #[serde(alias = "roottopic")]
-    root_topic: String,
-    ha: HomeAssistant,
+    pub root_topic: String,
+    pub ha: HomeAssistant,
 }
 
 #[derive(Debug, Deserialize)]
 #[allow(unused)]
 pub struct HomeAssistant {
     #[serde(alias = "enablediscovery")]
-    enable_discovery: bool,
+    pub enable_discovery: bool,
     #[serde(alias = "discoverytopicprefix")]
-    discovery_topic_prefix: String,
+    pub discovery_topic_prefix: String,
     #[serde(alias = "componentid")]
-    component_id: String,
+    pub component_id: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[allow(unused)]
 pub struct Cups {
-    uri: String,
+    pub uri: String,
     #[serde(alias = "ignoretlserrors")]
-    ignore_tls_errors: bool,
-    username: String,
-    password: String,
+    pub ignore_tls_errors: bool,
+    pub username: String,
+    pub password: String,
     #[serde(alias = "printqueues")]
-    print_queues: Vec<String>,
+    pub print_queues: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[allow(unused)]
 pub struct Settings {
-    mqtt: Mqtt,
-    cups: Cups,
+    pub mqtt: Mqtt,
+    pub cups: Cups,
     #[serde(alias = "sentrydsn")]
-    sentry_dsn: Option<String>,
+    pub sentry_dsn: Option<String>,
 }
