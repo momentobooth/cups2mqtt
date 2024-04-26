@@ -125,8 +125,9 @@ pub fn get_printers(uri: String, ignore_tls_errors: bool) -> Result<Vec<IppPrint
         let state_message = group["printer-state-message"].value().to_string().clone();
         let queue_name = group["printer-name"].value().to_string().clone();
         let description = group["printer-info"].value().to_string().clone();
+        let printer_make = group["printer-make-and-model"].value().to_string().clone();
         let state_reason = group["printer-state-reasons"].value().to_string().clone();
-        vec.push(IppPrinterState { queue_name, description, state, job_count, state_message, state_reason });
+        vec.push(IppPrinterState { queue_name, description, printer_make, state, job_count, state_message, state_reason });
     }
 
     Ok(vec)
@@ -147,9 +148,10 @@ pub fn get_printer_state(uri: String, ignore_tls_errors: bool) -> Result<IppPrin
     let state_message = attributes["printer-state-message"].value().to_string().clone();
     let queue_name = attributes["printer-name"].value().to_string().clone();
     let description = attributes["printer-info"].value().to_string().clone();
+    let printer_make = attributes["printer-make-and-model"].value().to_string().clone();
     let state_reason = attributes["printer-state-reasons"].value().to_string().clone();
     //print_attributes(attributes);
-    Ok(IppPrinterState { queue_name, description, state, job_count, state_message, state_reason })
+    Ok(IppPrinterState { queue_name, description, printer_make, state, job_count, state_message, state_reason })
 }
 
 pub fn get_jobs_states(uri: String, ignore_tls_errors: bool) -> Result<Vec<PrintJobState>> {

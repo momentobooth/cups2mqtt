@@ -11,6 +11,7 @@ use crate::cups_client::models::IppPrinterState;
 pub struct MqttCupsPrintQueueStatus {
     pub name: String,
     pub description: String,
+    pub printer_make: String,
     pub state: MqttCupsPrinterState,
     pub job_count: i32,
     pub state_message: String,
@@ -24,19 +25,20 @@ pub enum MqttCupsPrinterState {
     Stopped = 5,
 }
 
-impl From<IppPrinterState> for MqttCupsPrintQueueStatus {
-    fn from(status: IppPrinterState) -> Self {
+impl From<&IppPrinterState> for MqttCupsPrintQueueStatus {
+    fn from(status: &IppPrinterState) -> Self {
         MqttCupsPrintQueueStatus {
-            name: status.queue_name,
-            description: status.description,
+            name: status.queue_name.clone(),
+            description: status.description.clone(),
+            printer_make: status.printer_make.clone(),
             state: match status.state {
                 PrinterState::Idle => MqttCupsPrinterState::Idle,
                 PrinterState::Processing => MqttCupsPrinterState::Processing,
                 PrinterState::Stopped => MqttCupsPrinterState::Stopped,
             },
             job_count: status.job_count,
-            state_message: status.state_message,
-            state_reason: status.state_reason,
+            state_message: status.state_message.clone(),
+            state_reason: status.state_reason.clone(),
         }
     }
 }
@@ -67,7 +69,6 @@ pub struct HomeAssistantDiscoveryDeviceTriggerPayload {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HomeAssistantDevice {
     pub identifiers: Vec<String>,
-    pub manufacturer: String,
     pub model: String,
     pub name: String,
     pub sw_version: String,

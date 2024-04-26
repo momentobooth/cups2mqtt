@@ -5,6 +5,7 @@ use ipp::model::{JobState, PrinterState};
 pub struct IppPrinterState {
     pub queue_name: String,
     pub description: String,
+    pub printer_make: String,
     pub state: PrinterState,
     pub job_count: i32,
     pub state_message: String,

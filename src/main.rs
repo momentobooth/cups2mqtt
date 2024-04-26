@@ -4,6 +4,9 @@ use anyhow::Result;
 use config::models::Settings;
 use backon::BlockingRetryable;
 use backon::ExponentialBuilder;
+use convert_case::Converter;
+use convert_case::Pattern;
+use cups_client::models::IppPrinterState;
 use log::debug;
 use log::error;
 use mqtt_client::client::MqttClient;
@@ -68,39 +71,38 @@ fn publish_cups_queue_statuses() -> Result<usize> {
     let queue_count = result.len();
     for queue in result {
         let queue_name = queue.queue_name.clone();
-        let queue_description = queue.description.clone();
 
         let topic = format!("{}/{}", settings.mqtt.root_topic, queue_name);
-        let payload = serde_json::to_string(&MqttCupsPrintQueueStatus::from(queue))?;
+        let payload = serde_json::to_string(&MqttCupsPrintQueueStatus::from(&queue))?;
         get_mqtt_client().publish(&topic, payload.as_bytes())?;
 
         if settings.mqtt.ha.enable_discovery {
-            publish_ha_sensor_discovery_topic(&queue_name, &queue_description, "name".to_owned())?;
-            publish_ha_sensor_discovery_topic(&queue_name, &queue_description, "description".to_owned())?;
-            publish_ha_sensor_discovery_topic(&queue_name, &queue_description, "state".to_owned())?;
-            publish_ha_sensor_discovery_topic(&queue_name, &queue_description, "job_count".to_owned())?;
-            publish_ha_sensor_discovery_topic(&queue_name, &queue_description, "state_message".to_owned())?;
-            publish_ha_sensor_discovery_topic(&queue_name, &queue_description, "state_reason".to_owned())?;
+            publish_ha_sensor_discovery_topic(&queue, "name".to_owned())?;
+            publish_ha_sensor_discovery_topic(&queue, "description".to_owned())?;
+            publish_ha_sensor_discovery_topic(&queue, "state".to_owned())?;
+            publish_ha_sensor_discovery_topic(&queue, "job_count".to_owned())?;
+            publish_ha_sensor_discovery_topic(&queue, "state_message".to_owned())?;
+            publish_ha_sensor_discovery_topic(&queue, "state_reason".to_owned())?;
         }
     }
 
     Ok(queue_count)
 }
 
-fn publish_ha_sensor_discovery_topic(print_queue_name: &str, print_queue_description: &str, integration_name: String) -> Result<()> {
+fn publish_ha_sensor_discovery_topic(queue: &IppPrinterState, integration_name: String) -> Result<()> {
     let settings = get_settings();
+    let case_converter = Converter::new().set_pattern(Pattern::Sentence).set_delim(" ");
 
-    let topic = format!("{}/sensor/{}/{}/config", settings.mqtt.ha.discovery_topic_prefix, &print_queue_name, integration_name);
+    let topic = format!("{}/sensor/{}/{}/config", settings.mqtt.ha.discovery_topic_prefix, queue.queue_name, integration_name);
     let payload = serde_json::to_string(&HomeAssistantDiscoverySensorPayload {
-        name: integration_name.to_owned(),
-        state_topic: format!("{}/{}", settings.mqtt.root_topic, print_queue_name),
-        unique_id: format!("{}_{}", print_queue_name, integration_name),
+        name: case_converter.convert(integration_name.to_owned()),
+        state_topic: format!("{}/{}", settings.mqtt.root_topic, queue.queue_name),
+        unique_id: format!("{}_{}_{}", queue.queue_name, integration_name, settings.mqtt.ha.component_id),
         value_template: format!("{{{{ value_json.{} }}}}", integration_name),
         device: HomeAssistantDevice {
-            identifiers: vec![print_queue_name.to_owned()],
-            manufacturer: "CUPS2MQTT".to_owned(),
-            name: print_queue_description.to_owned(),
-            model: "CUPS Print Queue".to_owned(),
+            identifiers: vec![format!("{}_{}", settings.mqtt.ha.component_id, queue.queue_name.to_owned())],
+            name: queue.description.to_owned(),
+            model: queue.printer_make.to_owned(),
             sw_version: env!("CARGO_PKG_VERSION").to_owned(),
         },
     })?;
