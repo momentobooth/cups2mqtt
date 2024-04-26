@@ -4,7 +4,7 @@ FROM rust:alpine AS build
 WORKDIR /app
 
 # Install host build dependencies.
-RUN apk add --no-cache clang lld musl-dev git pkgconfig libressl-dev
+RUN apk add --no-cache clang lld musl-dev git pkgconfig openssl-dev openssl-libs-static
 
 # Build the application.
 # Leverage a cache mount to /usr/local/cargo/registry/
