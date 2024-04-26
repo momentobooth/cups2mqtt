@@ -27,14 +27,13 @@ fn main() {
     colog::init();
 
     loop {
-        let cups_print_queues = get_cups_print_queues.retry(&ExponentialBuilder::default().with_factor(4.0)).call();
+        let cups_print_queues = publish_cups_queue_statuses_and_log_result.retry(&ExponentialBuilder::default().with_factor(4.0)).call();
         match cups_print_queues {
             Ok(_) => {
-                debug!("Successfully published CUPS print queues to MQTT.");
                 std::thread::sleep(std::time::Duration::from_secs(1));
             },
-            Err(e) => {
-                error!("Error publishing CUPS print queues to MQTT: {:?}", e);
+            Err(_) => {
+                error!("Too many failures, waiting 30s before trying again");
                 failure_wait();
             }
         }
@@ -46,16 +45,32 @@ fn failure_wait() {
     std::thread::sleep(std::time::Duration::from_secs(30));
 }
 
-fn get_cups_print_queues() -> Result<()> {
+fn publish_cups_queue_statuses_and_log_result() -> Result<()> {
+    match publish_cups_queue_statuses() {
+        Ok(count) => {
+            debug!("Published {} queue statuses", count);
+            Ok(())
+        },
+        Err(e) => {
+            error!("Failed to publish queue statuses: {}", e);
+            Err(e)
+        }
+    }
+}
+
+fn publish_cups_queue_statuses() -> Result<usize> {
     let settings = get_settings();
     let url = cups_client::client::build_cups_url(&settings.cups, None);
     let result = cups_client::client::get_printers(url, settings.cups.ignore_tls_errors)?;
 
-    Ok(for queue in result {
+    let queue_count = result.len();
+    for queue in result {
         let topic = format!("{}/{}", settings.mqtt.root_topic, queue.queue_name);
         let payload = serde_json::to_string(&MqttCupsPrintQueueStatus::from(queue))?;
         println!("{}: {}", topic, payload);
         get_mqtt_client().publish(&topic, payload.as_bytes())?;
         println!("Published: {}", topic);
-    })
+    }
+
+    Ok(queue_count)
 }
