@@ -5,10 +5,12 @@ use config::models::Settings;
 use cups_client::models::IppPrinterState;
 use backon::BlockingRetryable;
 use backon::ExponentialBuilder;
-use log::{error, warn, info, debug, trace};
+use log::debug;
+use log::error;
 
-pub mod cups_client;
-pub mod config;
+mod cups_client;
+mod config;
+mod mqtt_client;
 
 pub fn get_settings() -> &'static Settings {
     static LOG_FILE_REGEX: OnceLock<Settings> = OnceLock::new();
