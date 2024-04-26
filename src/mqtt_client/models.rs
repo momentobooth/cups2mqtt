@@ -51,6 +51,7 @@ pub struct HomeAssistantDiscoverySensorPayload {
     pub state_topic: String,
     pub unique_id: String,
     pub device: HomeAssistantDevice,
+    pub value_template: String
 }
 
 #[derive(Debug, Serialize, Deserialize)]

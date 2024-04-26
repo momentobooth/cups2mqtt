@@ -7,6 +7,8 @@ use backon::ExponentialBuilder;
 use log::debug;
 use log::error;
 use mqtt_client::client::MqttClient;
+use mqtt_client::models::HomeAssistantDevice;
+use mqtt_client::models::HomeAssistantDiscoverySensorPayload;
 use mqtt_client::models::MqttCupsPrintQueueStatus;
 
 mod cups_client;
@@ -65,12 +67,42 @@ fn publish_cups_queue_statuses() -> Result<usize> {
 
     let queue_count = result.len();
     for queue in result {
-        let topic = format!("{}/{}", settings.mqtt.root_topic, queue.queue_name);
+        let queue_name = queue.queue_name.clone();
+        let queue_description = queue.description.clone();
+
+        let topic = format!("{}/{}", settings.mqtt.root_topic, queue_name);
         let payload = serde_json::to_string(&MqttCupsPrintQueueStatus::from(queue))?;
-        println!("{}: {}", topic, payload);
         get_mqtt_client().publish(&topic, payload.as_bytes())?;
-        println!("Published: {}", topic);
+
+        if settings.mqtt.ha.enable_discovery {
+            publish_ha_sensor_discovery_topic(&queue_name, &queue_description, "name".to_owned())?;
+            publish_ha_sensor_discovery_topic(&queue_name, &queue_description, "description".to_owned())?;
+            publish_ha_sensor_discovery_topic(&queue_name, &queue_description, "state".to_owned())?;
+            publish_ha_sensor_discovery_topic(&queue_name, &queue_description, "job_count".to_owned())?;
+            publish_ha_sensor_discovery_topic(&queue_name, &queue_description, "state_message".to_owned())?;
+            publish_ha_sensor_discovery_topic(&queue_name, &queue_description, "state_reason".to_owned())?;
+        }
     }
 
     Ok(queue_count)
+}
+
+fn publish_ha_sensor_discovery_topic(print_queue_name: &str, print_queue_description: &str, integration_name: String) -> Result<()> {
+    let settings = get_settings();
+
+    let topic = format!("{}/sensor/{}/{}/config", settings.mqtt.ha.discovery_topic_prefix, &print_queue_name, integration_name);
+    let payload = serde_json::to_string(&HomeAssistantDiscoverySensorPayload {
+        name: integration_name.to_owned(),
+        state_topic: format!("{}/{}", settings.mqtt.root_topic, print_queue_name),
+        unique_id: format!("{}_{}", print_queue_name, integration_name),
+        value_template: format!("{{{{ value_json.{} }}}}", integration_name),
+        device: HomeAssistantDevice {
+            identifiers: vec![print_queue_name.to_owned()],
+            manufacturer: "CUPS2MQTT".to_owned(),
+            name: print_queue_description.to_owned(),
+            model: "CUPS Print Queue".to_owned(),
+            sw_version: env!("CARGO_PKG_VERSION").to_owned(),
+        },
+    })?;
+    Ok(get_mqtt_client().publish(&topic, payload.as_bytes())?)
 }
