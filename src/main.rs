@@ -9,6 +9,7 @@ use convert_case::Pattern;
 use cups_client::models::IppPrinterState;
 use log::debug;
 use log::error;
+use log::info;
 use mqtt_client::client::MqttClient;
 use mqtt_client::models::HomeAssistantDevice;
 use mqtt_client::models::HomeAssistantDiscoverySensorPayload;
@@ -30,6 +31,11 @@ pub fn get_mqtt_client() -> &'static MqttClient {
 
 fn main() {
     colog::init();
+
+    info!("Starting cups2mqtt v{}", env!("CARGO_PKG_VERSION"));
+
+    let settings = get_settings();
+    info!("Running with config: {:#?}", settings);
 
     loop {
         let cups_print_queues = publish_cups_queue_statuses_and_log_result.retry(&ExponentialBuilder::default().with_factor(4.0)).call();

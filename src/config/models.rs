@@ -40,8 +40,6 @@ pub struct Cups {
     pub ignore_tls_errors: bool,
     pub username: String,
     pub password: String,
-    #[serde(alias = "printqueues")]
-    pub print_queues: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
