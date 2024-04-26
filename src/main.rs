@@ -7,6 +7,7 @@ use backon::ExponentialBuilder;
 use convert_case::Converter;
 use convert_case::Pattern;
 use cups_client::models::IppPrinterState;
+use dashmap::DashMap;
 use log::debug;
 use log::error;
 use log::info;
@@ -27,6 +28,11 @@ pub fn get_settings() -> &'static Settings {
 pub fn get_mqtt_client() -> &'static MqttClient {
     static LOG_FILE_REGEX: OnceLock<MqttClient> = OnceLock::new();
     LOG_FILE_REGEX.get_or_init(|| mqtt_client::client::MqttClient::new(&get_settings().mqtt))
+}
+
+pub fn get_last_published_mqtt_messages() -> &'static DashMap<String, String> {
+    static LOG_FILE_REGEX: OnceLock<DashMap<String, String>> = OnceLock::new();
+    LOG_FILE_REGEX.get_or_init(|| DashMap::new())
 }
 
 fn main() {
@@ -80,7 +86,7 @@ fn publish_cups_queue_statuses() -> Result<usize> {
 
         let topic = format!("{}/{}", settings.mqtt.root_topic, queue_name);
         let payload = serde_json::to_string(&MqttCupsPrintQueueStatus::from(&queue))?;
-        get_mqtt_client().publish(&topic, payload.as_bytes())?;
+        publish(&topic, payload)?;
 
         if settings.mqtt.ha.enable_discovery {
             publish_ha_sensor_discovery_topic(&queue, "name".to_owned())?;
@@ -112,5 +118,13 @@ fn publish_ha_sensor_discovery_topic(queue: &IppPrinterState, integration_name: 
             sw_version: env!("CARGO_PKG_VERSION").to_owned(),
         },
     })?;
-    Ok(get_mqtt_client().publish(&topic, payload.as_bytes())?)
+    Ok(publish(&topic, payload)?)
+}
+
+fn publish(topic: &str, payload: String) -> Result<()> {
+    let last_published = get_last_published_mqtt_messages().get(topic);
+    Ok(if last_published.is_none() || !last_published.unwrap().eq(&payload) {
+        get_last_published_mqtt_messages().insert(topic.to_owned(), payload.clone());
+        get_mqtt_client().publish(topic, payload.as_bytes())?;
+    })
 }
