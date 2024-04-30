@@ -4,7 +4,27 @@ This is the repository for the CUPS2MQTT project. The goal of this project is to
 
 Additionally, this projects will provide the data to Home Assistant via the MQTT Discovery feature.
 
-Status: WIP (not ready for use)
+Status: Basic functionality in place, Docker image available on [Docker Hub](https://hub.docker.com/r/h3x4d3c1m4l/cups2mqtt).
+
+## Current functionality
+
+- [X] MQTT and CUPS connection details configurable
+  - [X] Allows secure connection to MQTT broker and CUPS server
+  - [X] Allows verification of TLS certificates through system CA store
+  - [X] Allows TLS without verification of server certificate
+- [X] Name, description, state and job count of printqueues are sent to MQTT broker
+  - [ ] Supports job details
+- [X] Home Assistant MQTT Discovery support
+  - [ ] No support for topology discovery
+- [ ] Control of print queues via MQTT
+  - [ ] Pause/Resume print queues
+  - [ ] Cancel print jobs
+  - [ ] Restart print jobs
+  - [ ] Add print jobs
+- [ ] Error reporting through Sentry
+- [X] Application packaging
+  - [X] Docker image
+  - [ ] Anything else, like Windows installer or perhaps a Homebrew package
 
 ## Troubleshooting
 
