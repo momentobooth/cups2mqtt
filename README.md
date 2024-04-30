@@ -16,12 +16,15 @@ Status: Basic functionality in place, Docker image available on [Docker Hub](htt
   - [ ] Supports job details
 - [X] Home Assistant MQTT Discovery support
   - [ ] No support for topology discovery
+  - [ ] Online/Offline status (using LWT?)
 - [ ] Control of print queues via MQTT
   - [ ] Pause/Resume print queues
   - [ ] Cancel print jobs
   - [ ] Restart print jobs
   - [ ] Add print jobs
 - [ ] Error reporting through Sentry
+- [ ] Handling disappeared print queues
+- [ ] MQTT LWT support
 - [X] Application packaging
   - [X] Docker image
   - [ ] Anything else, like Windows installer or perhaps a Homebrew package
