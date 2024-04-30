@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    if: false && ${{ startsWith(github.event.pull_request.head.ref, 'release/') != true && github.event.pull_request.draft != true }}
+    if: ${{ startsWith(github.event.pull_request.head.ref, 'release/') != true && github.event.pull_request.draft != true }}
 
     strategy:
       matrix:
