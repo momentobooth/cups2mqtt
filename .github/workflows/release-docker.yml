@@ -1,4 +1,4 @@
-name: Release - Linux AppImage x86_64
+name: Release - Linux Docker amd64/arm64
 
 on:
   pull_request:
