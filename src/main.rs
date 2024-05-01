@@ -101,11 +101,32 @@ fn publish_cups_queue_statuses() -> Result<usize> {
     Ok(queue_count)
 }
 
+fn publish_ha_bridge_discovery_topic() -> Result<()> {
+    let settings = get_settings();
+    let case_converter = Converter::new().set_pattern(Pattern::Sentence).set_delim(" ");
+
+    let topic = format!("{}/sensor/{}/cups2mqtt_version/config", settings.mqtt.ha.discovery_topic_prefix, settings.mqtt.ha.component_id);
+    let payload = serde_json::to_string(&HomeAssistantDiscoverySensorPayload {
+        name: "CUPS2MQTT version".to_owned(),
+        state_topic: format!("{}/{}", settings.mqtt.root_topic, "cups_server"),
+        unique_id: format!("cups2mqtt_version_{}", settings.mqtt.ha.component_id),
+        value_template: "{{ value_json.version }}".to_owned(),
+        device: HomeAssistantDevice {
+            identifiers: vec![format!("CUPS_{}", settings.mqtt.ha.component_id)],
+            name: format!("CUPS @ {}", settings.cups.uri),
+            model: "CUPS Print Server".to_owned(),
+            sw_version: env!("CARGO_PKG_VERSION").to_owned(),
+            via_device: None,
+        },
+    })?;
+    Ok(publish(&topic, payload)?)
+}
+
 fn publish_ha_sensor_discovery_topic(queue: &IppPrinterState, integration_name: String) -> Result<()> {
     let settings = get_settings();
     let case_converter = Converter::new().set_pattern(Pattern::Sentence).set_delim(" ");
 
-    let topic = format!("{}/sensor/{}/{}/config", settings.mqtt.ha.discovery_topic_prefix, queue.queue_name, integration_name);
+    let topic = format!("{}/sensor/{}_{}/{}/config", settings.mqtt.ha.discovery_topic_prefix, settings.mqtt.ha.component_id, queue.queue_name, integration_name);
     let payload = serde_json::to_string(&HomeAssistantDiscoverySensorPayload {
         name: case_converter.convert(integration_name.to_owned()),
         state_topic: format!("{}/{}", settings.mqtt.root_topic, queue.queue_name),
@@ -116,6 +137,7 @@ fn publish_ha_sensor_discovery_topic(queue: &IppPrinterState, integration_name: 
             name: queue.description.to_owned(),
             model: queue.printer_make.to_owned(),
             sw_version: env!("CARGO_PKG_VERSION").to_owned(),
+            via_device: Some(settings.mqtt.ha.component_id.clone()),
         },
     })?;
     Ok(publish(&topic, payload)?)

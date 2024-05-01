@@ -72,4 +72,5 @@ pub struct HomeAssistantDevice {
     pub model: String,
     pub name: String,
     pub sw_version: String,
+    pub via_device: Option<String>,
 }
