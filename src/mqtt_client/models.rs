@@ -1,11 +1,18 @@
 use ipp::model::PrinterState;
 use serde::{Deserialize, Serialize};
 
-use crate::cups_client::models::IppPrinterState;
+use crate::cups_client::models::IppPrintQueueState;
 
 // ////// //
 // Status //
 // ////// //
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MqttCupsServerStatus {
+    pub is_reachable: bool,
+    pub cups_version: Option<String>,
+    pub cups2mqtt_version: String,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MqttCupsPrintQueueStatus {
@@ -25,8 +32,8 @@ pub enum MqttCupsPrinterState {
     Stopped = 5,
 }
 
-impl From<&IppPrinterState> for MqttCupsPrintQueueStatus {
-    fn from(status: &IppPrinterState) -> Self {
+impl From<&IppPrintQueueState> for MqttCupsPrintQueueStatus {
+    fn from(status: &IppPrintQueueState) -> Self {
         MqttCupsPrintQueueStatus {
             name: status.queue_name.clone(),
             description: status.description.clone(),
@@ -71,6 +78,8 @@ pub struct HomeAssistantDevice {
     pub identifiers: Vec<String>,
     pub model: String,
     pub name: String,
-    pub sw_version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sw_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub via_device: Option<String>,
 }

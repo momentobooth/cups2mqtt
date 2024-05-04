@@ -1,8 +1,7 @@
-use chrono::{DateTime, Utc};
-use ipp::model::{JobState, PrinterState};
+use ipp::model::PrinterState;
 
 #[derive(Debug)]
-pub struct IppPrinterState {
+pub struct IppPrintQueueState {
     pub queue_name: String,
     pub description: String,
     pub printer_make: String,
@@ -10,13 +9,5 @@ pub struct IppPrinterState {
     pub job_count: i32,
     pub state_message: String,
     pub state_reason: String,
-}
-
-#[derive(Debug)]
-pub struct PrintJobState {
-    pub name: String,
-    pub id: i32,
-    pub state: JobState,
-    pub reason: String,
-    pub created: DateTime<Utc>,
+    pub cups_version: String,
 }

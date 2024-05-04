@@ -39,6 +39,6 @@ impl MqttClient {
     }
 
     pub fn publish(&self, topic: &str, payload: &[u8]) -> Result<()> {
-        Ok(self.client.publish(topic, QoS::AtLeastOnce, false, payload)?)
+        Ok(self.client.publish(topic, QoS::AtLeastOnce, true, payload)?)
     }
 }
