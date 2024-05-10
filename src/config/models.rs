@@ -45,6 +45,8 @@ pub struct Cups {
 #[derive(Debug, Deserialize)]
 #[allow(unused)]
 pub struct Settings {
+    #[serde(alias = "pollingintervalms")]
+    pub polling_interval_ms: u32,
     pub mqtt: Mqtt,
     pub cups: Cups,
     #[serde(alias = "sentrydsn")]

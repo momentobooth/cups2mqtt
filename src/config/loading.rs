@@ -18,6 +18,7 @@ pub fn load_config() -> Settings {
             .try_parsing(true)
             .with_list_parse_key("CUPS.PRINTQUEUES")
             .list_separator(","))
+            .set_default("pollingintervalms", "500").unwrap()
             .set_default("mqtt.host", "localhost").unwrap()
             .set_default("mqtt.host", "localhost").unwrap()
             .set_default("mqtt.port", "1883").unwrap()
