@@ -1,3 +1,5 @@
+use std::io::Cursor;
+
 use ipp::prelude::*;
 use url::Url;
 use anyhow::{Context, Result};
@@ -31,6 +33,17 @@ pub fn get_print_queues(uri: String, ignore_tls_errors: bool) -> Result<Vec<IppP
     }
 
     Ok(vec)
+}
+
+pub fn print_job(uri: String, ignore_tls_errors: bool, job_name: String, pdf_data: Vec<u8>) -> bool {
+    let uri_p: Uri = uri.parse().unwrap();
+    let pdf_data_cursor = Cursor::new(pdf_data);
+    let pdf_data_payload = IppPayload::new(pdf_data_cursor);
+    let print_job = IppOperationBuilder::print_job(uri_p.clone(), pdf_data_payload).job_title(job_name);
+
+    let client = IppClient::builder(uri_p).ignore_tls_errors(ignore_tls_errors).build();
+    let resp = client.send(print_job.build());
+    resp.unwrap().header().status_code().is_success()
 }
 
 // /////// //
