@@ -56,10 +56,23 @@ fn failure_wait() {
     std::thread::sleep(std::time::Duration::from_secs(30));
 }
 
+fn send_cups_command(print_queue: String) {
+    let command_str = "#CUPS-COMMAND\nReportLevels";
+    let command_bytes = command_str.as_bytes();
+
+    let settings = get_settings();
+    let url = cups_client::client::build_cups_url(&settings.cups, Some(print_queue));
+    cups_client::client::print_job(url.unwrap(), settings.cups.ignore_tls_errors, "cups2mqtt".to_owned(), command_bytes.to_vec());
+}
+
 fn publish_cups_queue_statuses_and_log_result() -> Result<()> {
     let settings = get_settings();
     let url = cups_client::client::build_cups_url(&settings.cups, None);
     let print_queues_result = cups_client::client::get_print_queues(url?.clone(), settings.cups.ignore_tls_errors);
+
+    for queue in print_queues_result.as_ref().unwrap() {
+        send_cups_command(queue.queue_name.clone());
+    }
 
     match &print_queues_result {
         Ok(print_queues) => {
@@ -165,6 +178,8 @@ fn publish_cups_queue_statuses(print_queues: Vec<IppPrintQueueState>) -> Result<
         let topic = format!("{}/{}", settings.mqtt.root_topic, queue_name);
         let payload = serde_json::to_string(&MqttCupsPrintQueueStatus::from(&queue))?;
         publish(&topic, payload)?;
+
+        println!("{}: {}; {}", queue_name, queue.state_message, queue.state_reason);
 
         if settings.mqtt.ha.enable_discovery {
             publish_ha_sensor_discovery_topic(&queue, "name")?;

@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::io::{Cursor, Read};
 
 use ipp::prelude::*;
 use url::Url;
@@ -43,6 +43,7 @@ pub fn print_job(uri: String, ignore_tls_errors: bool, job_name: String, pdf_dat
 
     let client = IppClient::builder(uri_p).ignore_tls_errors(ignore_tls_errors).build();
     let resp = client.send(print_job.build());
+    println!("{:?}", resp.as_ref().unwrap().attributes());
     resp.unwrap().header().status_code().is_success()
 }
 
