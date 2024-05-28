@@ -14,6 +14,7 @@ pub struct MqttCupsServerStatus {
     pub cups2mqtt_version: String,
 }
 
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MqttCupsPrintQueueStatus {
     pub name: String,
