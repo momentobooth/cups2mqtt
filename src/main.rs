@@ -38,7 +38,7 @@ fn main() {
     info!("Running with config: {:#?}", settings);
 
     loop {
-        let cups_print_queues = publish_cups_queue_statuses_and_log_result.retry(&ExponentialBuilder::default().with_factor(4.0)).call();
+        let cups_print_queues = publish_cups_queue_statuses_and_log_result.retry(ExponentialBuilder::default().with_factor(4.0)).call();
         match cups_print_queues {
             Ok(_) => {
                 std::thread::sleep(std::time::Duration::from_millis(settings.polling_interval_ms as u64));
