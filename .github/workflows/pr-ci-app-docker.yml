@@ -16,7 +16,7 @@ jobs:
           - linux/amd64
           - linux/arm64
 
-    runs-on: ${{ fromJSON('["ubuntu-latest", ["self-hosted", "Linux", "ARM64"]]')[matrix.platform == 'linux/arm64'] }}
+    runs-on: ${{ fromJSON('["ubuntu-24.04", ["self-hosted", "Linux", "ARM64"]]')[matrix.platform == 'linux/arm64'] }}
 
     steps:
     - name: Checkout
