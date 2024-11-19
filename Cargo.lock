@@ -1048,6 +1048,7 @@ dependencies = [
  "reqwest",
  "thiserror",
  "tokio-util",
+ "ureq",
 ]
 
 [[package]]
