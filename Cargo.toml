@@ -6,13 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.93"
-ipp = { version = "5.1.0", features = ["client"] }
+anyhow = "1.0.94"
+ipp = { version = "5.2.0", features = ["client"] }
 rumqttc = "0.24.0"
 serde = "1.0.215"
 serde_derive = "1.0.215"
 serde_json = "1.0.133"
-chrono = "0.4.38"
+chrono = "0.4.39"
 sentry = "0.35.0"
 config = "0.14.1"
 dotenv-flow = "0.16.2"
