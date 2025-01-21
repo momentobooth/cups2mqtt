@@ -16,7 +16,7 @@ jobs:
   build:
     if: ${{ github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/') }}
 
-    runs-on: ${{ fromJSON('["ubuntu-24.04", ["self-hosted", "Linux", "ARM64"]]')[matrix.platform == 'linux/arm64'] }}
+    runs-on: ${{ fromJSON('["ubuntu-24.04", "ubuntu-24.04-arm"]')[matrix.platform == 'linux/arm64'] }}
 
     strategy:
       matrix:
@@ -71,7 +71,7 @@ jobs:
           retention-days: 1
 
   merge:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     needs:
       - build
