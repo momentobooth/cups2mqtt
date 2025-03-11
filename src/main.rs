@@ -3,7 +3,7 @@ use std::sync::OnceLock;
 use anyhow::{Context, Result};
 use config::models::Settings;
 use backon::{BlockingRetryable, ExponentialBuilder};
-use convert_case::{Converter, Pattern};
+use convert_case::{Converter, pattern};
 use cups_client::models::IppPrintQueueState;
 use dashmap::DashMap;
 use log::{debug, error, info};
@@ -181,7 +181,7 @@ fn publish_cups_queue_statuses(print_queues: Vec<IppPrintQueueState>) -> Result<
 
 fn publish_ha_sensor_discovery_topic(queue: &IppPrintQueueState, integration_name: &str) -> Result<()> {
     let settings = get_settings();
-    let case_converter = Converter::new().set_pattern(Pattern::Sentence).set_delim(" ");
+    let case_converter = Converter::new().set_pattern(pattern::sentence).set_delim(" ");
 
     let topic = format!("{}/sensor/{}_{}/{}/config", settings.mqtt.ha.discovery_topic_prefix, settings.mqtt.ha.component_id, queue.queue_name, integration_name);
     let payload = serde_json::to_string(&HomeAssistantDiscoverySensorPayload {
