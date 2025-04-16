@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.97"
+anyhow = "1.0.98"
 ipp = { version = "5.2.0", features = ["client"] }
 rumqttc = "0.24.0"
 serde = "1.0.219"
@@ -17,7 +17,7 @@ sentry = "0.37.0"
 config = "0.15.11"
 dotenv-flow = "0.16.2"
 url = "2.5.4"
-backon = "1.4.1"
+backon = "1.5.0"
 log = "0.4.27"
 colog = "1.3.0"
 rustls-native-certs = "0.8.1"
