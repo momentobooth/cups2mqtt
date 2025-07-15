@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.98"
-ipp = { version = "5.3.1", features = ["client"] }
+ipp = { version = "5.3.1", features = ["client-tls"]}
 rumqttc = "0.24.0"
 serde = "1.0.219"
 serde_derive = "1.0.219"
