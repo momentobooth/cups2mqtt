@@ -30,6 +30,13 @@ pub fn get_last_published_mqtt_messages() -> &'static DashMap<String, String> {
 }
 
 fn main() {
+    // As Rust has no native support for .env files,
+    // we use the dotenv_flow crate to import to actual ENV vars.
+    let dotenv_path = dotenv_flow::dotenv_flow();
+    if dotenv_path.is_ok() {
+        println!("Loaded dotenv file: {:?}", dotenv_path.unwrap());
+    }
+
     colog::init();
 
     info!("Starting cups2mqtt v{}", env!("CARGO_PKG_VERSION"));
