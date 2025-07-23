@@ -1,8 +1,8 @@
 use std::io::Cursor;
 
 use ipp::prelude::*;
+use snafu::{OptionExt, ResultExt, Whatever};
 use url::Url;
-use anyhow::{Context, Result};
 
 use crate::config::models::Cups;
 
@@ -12,7 +12,7 @@ use super::models::{*};
 // Print queues //
 // //////////// //
 
-pub fn get_print_queues(uri: String, ignore_tls_errors: bool) -> Result<Vec<IppPrintQueueState>> {
+pub fn get_print_queues(uri: String, ignore_tls_errors: bool) -> Result<Vec<IppPrintQueueState>, Whatever> {
     let resp = send_ipp_request(uri.clone(), ignore_tls_errors, Operation::CupsGetPrinters);
     let mut vec: Vec<IppPrintQueueState> = Vec::new();
 
@@ -21,8 +21,8 @@ pub fn get_print_queues(uri: String, ignore_tls_errors: bool) -> Result<Vec<IppP
         let state = group["printer-state"]
             .value()
             .as_enum()
-            .and_then(|v| PrinterState::from_i32(*v)).context("Failed to parse printer state")?;
-        let job_count = group["queued-job-count"].value().as_integer().context("Failed to parse job count")?.clone();
+            .and_then(|v| PrinterState::from_i32(*v)).with_whatever_context(|| "Failed to parse printer state")?;
+        let job_count = group["queued-job-count"].value().as_integer().with_whatever_context(|| "Failed to parse job count")?.clone();
         let state_message = group["printer-state-message"].value().to_string().clone();
         let queue_name = group["printer-name"].value().to_string().clone();
         let description = group["printer-info"].value().to_string().clone();
@@ -35,30 +35,40 @@ pub fn get_print_queues(uri: String, ignore_tls_errors: bool) -> Result<Vec<IppP
     Ok(vec)
 }
 
-pub fn print_job(uri: String, ignore_tls_errors: bool, job_name: String, pdf_data: Vec<u8>) -> bool {
-    let uri_p: Uri = uri.parse().unwrap();
-    let pdf_data_cursor = Cursor::new(pdf_data);
+// ///////////////////// //
+// Printing and commands //
+// ///////////////////// //
+
+pub fn report_supply_levels(uri: String, ignore_tls_errors: bool) -> Result<bool, Whatever> {
+    let command = "#CUPS-COMMAND\nReportLevels";
+    let command_bytes: Vec<u8> = command.as_bytes().to_vec();
+    Ok(print_job(uri, ignore_tls_errors, "CUPS2MQTT update supply levels".to_owned(), command_bytes)?)
+}
+
+pub fn print_job(uri: String, ignore_tls_errors: bool, job_name: String, job_data: Vec<u8>) -> Result<bool, Whatever> {
+    let uri_p: Uri = uri.parse::<Uri>().with_whatever_context(|_| format!("Could not parse URI {uri}"))?.clone();
+    let pdf_data_cursor = Cursor::new(job_data);
     let pdf_data_payload = IppPayload::new(pdf_data_cursor);
     let print_job = IppOperationBuilder::print_job(uri_p.clone(), pdf_data_payload).job_title(job_name);
 
     let client = IppClient::builder(uri_p).ignore_tls_errors(ignore_tls_errors).build();
-    let resp = client.send(print_job.build());
-    resp.unwrap().header().status_code().is_success()
+    let resp = client.send(print_job.build()).with_whatever_context(|_| format!("Could not send print job"))?;
+    Ok(resp.header().status_code().is_success())
 }
 
 // /////// //
 // Helpers //
 // /////// //
 
-pub fn build_cups_url(cups_settings: &Cups, queue_id: Option<String>) -> Result<String> {
-    let mut cups_url = Url::parse(&cups_settings.uri)?;
+pub fn build_cups_url(cups_settings: &Cups, queue_id: Option<String>) -> Result<String, Whatever> {
+    let mut cups_url = Url::parse(&cups_settings.uri).with_whatever_context(|_| "Could not parse CUPS URI")?;
     if !cups_settings.username.is_empty() && !cups_settings.password.is_empty() {
-        cups_url.set_username(&cups_settings.username).unwrap(); // FIXME: use .? instead of .unwrap()
-        cups_url.set_password(Some(&cups_settings.password)).unwrap(); // FIXME: use .? instead of .unwrap()
+        cups_url.set_username(&cups_settings.username).unwrap();
+        cups_url.set_password(Some(&cups_settings.password)).unwrap();
     }
 
     Ok(match queue_id {
-        Some(queue_id) => cups_url.join("printers/")?.join(&queue_id)?,
+        Some(queue_id) => cups_url.join("printers/").with_whatever_context(|_| "Could join ./printers/")?.join(&queue_id).with_whatever_context(|_| format!("Could not join queue ID {queue_id}"))?,
         None => cups_url,
     }.to_string())
 }
@@ -77,14 +87,19 @@ pub fn build_cups_url(cups_settings: &Cups, queue_id: Option<String>) -> Result<
 /// ```
 /// send_ipp_request(uri, Operation::ResumePrinter).header().status_code().is_success()
 /// ```
-fn send_ipp_request(uri: String, ignore_tls_errors: bool, op: Operation) -> Result<IppRequestResponse> {
-    let uri_p: Uri = uri.parse()?;
+fn send_ipp_request(uri: String, ignore_tls_errors: bool, op: Operation) -> Result<IppRequestResponse, Whatever> {
+    let uri_p: Uri = uri.parse().with_whatever_context(|_| format!("Could not parse URI {uri}"))?;
     let req = IppRequestResponse::new(
-        IppVersion::v1_1(),
+        IppVersion::v2_2(),
         op,
         Some(uri_p.clone())
     );
+
+    // If we ever want to specify which attributes we want to receive.
+    // req.attributes_mut().groups_mut().first_mut().unwrap().attributes_mut().insert("requested-attributes".to_owned(), IppAttribute::new(IppAttribute::REQUESTED_ATTRIBUTES, IppValue::Array(vec![
+    //     IppValue::Keyword("printer-name".to_owned())
+    // ])));
+
     let client = IppClient::builder(uri_p).ignore_tls_errors(ignore_tls_errors).build();
-    let resp = client.send(req);
-    Ok(resp?)
+    Ok(client.send(req).with_whatever_context(|_| format!("Could not send IPP request"))?)
 }

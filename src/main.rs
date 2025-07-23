@@ -1,13 +1,14 @@
-use std::sync::OnceLock;
+use std::{str::FromStr, sync::OnceLock};
 
-use anyhow::{Context, Result};
 use config::models::Settings;
 use backon::{BlockingRetryable, ExponentialBuilder};
 use convert_case::{Converter, pattern};
 use cups_client::models::IppPrintQueueState;
 use dashmap::DashMap;
+use ipp::prelude::Uri;
 use log::{debug, error, info};
 use mqtt_client::{client::MqttClient, models::*};
+use snafu::{OptionExt, ResultExt, Whatever};
 use url::Url;
 
 mod cups_client;
@@ -63,7 +64,7 @@ fn failure_wait() {
     std::thread::sleep(std::time::Duration::from_secs(30));
 }
 
-fn publish_cups_queue_statuses_and_log_result() -> Result<()> {
+fn publish_cups_queue_statuses_and_log_result() -> Result<(), Whatever> {
     let settings = get_settings();
     let url = cups_client::client::build_cups_url(&settings.cups, None);
     let print_queues_result = cups_client::client::get_print_queues(url?.clone(), settings.cups.ignore_tls_errors);
@@ -112,7 +113,7 @@ fn publish_cups_queue_statuses_and_log_result() -> Result<()> {
 // Print server publish //
 // //////////////////// //
 
-fn publish_cups_server_status(print_queues_result: &Result<Vec<IppPrintQueueState>>) -> Result<()> {
+fn publish_cups_server_status(print_queues_result: &Result<Vec<IppPrintQueueState>, Whatever>) -> Result<(), Whatever> {
     let settings = get_settings();
 
     let cups_version = match print_queues_result {
@@ -125,7 +126,7 @@ fn publish_cups_server_status(print_queues_result: &Result<Vec<IppPrintQueueStat
         is_reachable: print_queues_result.is_ok(),
         cups_version: cups_version.clone(),
         cups2mqtt_version: env!("CARGO_PKG_VERSION").to_owned(),
-    })?;
+    }).with_whatever_context(|_| format!("Could not serialize CUPS server status message for topic {topic}"))?;
     publish(&topic, payload)?;
 
     if settings.mqtt.ha.enable_discovery {
@@ -136,11 +137,11 @@ fn publish_cups_server_status(print_queues_result: &Result<Vec<IppPrintQueueStat
     Ok(())
 }
 
-fn publish_ha_bridge_discovery_topic(cups_version: &Option<String>, integration_name: &str, sensor_name: &str) -> Result<()> {
+fn publish_ha_bridge_discovery_topic(cups_version: &Option<String>, integration_name: &str, sensor_name: &str) -> Result<(), Whatever> {
     let settings = get_settings();
 
-    let url = Url::parse(&settings.cups.uri)?;
-    let display_url = format!("{}:{}", url.host_str().context("Failed to get host")?, url.port().unwrap_or(631));
+    let url = Url::parse(&settings.cups.uri).with_whatever_context(|_| format!("Could not parse CUPS URI {}", settings.cups.uri))?.clone();
+    let display_url = format!("{}:{}", url.host_str().with_whatever_context(|| "Failed to get host")?, url.port().unwrap_or(631));
 
     let topic = format!("{}/sensor/{}_cups_server/{}/config", settings.mqtt.ha.discovery_topic_prefix, settings.mqtt.ha.component_id, integration_name);
     let payload = serde_json::to_string(&HomeAssistantDiscoverySensorPayload {
@@ -155,7 +156,7 @@ fn publish_ha_bridge_discovery_topic(cups_version: &Option<String>, integration_
             sw_version: cups_version.clone(),
             via_device: None,
         },
-    })?;
+    }).with_whatever_context(|_| format!("Could not serialize HA bridge discovery message for topic {topic}"))?;
     Ok(publish(&topic, payload)?)
 }
 
@@ -163,14 +164,14 @@ fn publish_ha_bridge_discovery_topic(cups_version: &Option<String>, integration_
 // Print queue publish //
 // /////////////////// //
 
-fn publish_cups_queue_statuses(print_queues: Vec<IppPrintQueueState>) -> Result<()> {
+fn publish_cups_queue_statuses(print_queues: Vec<IppPrintQueueState>) -> Result<(), Whatever> {
     let settings = get_settings();
 
     for queue in print_queues {
         let queue_name = queue.queue_name.clone();
 
         let topic = format!("{}/{}", settings.mqtt.root_topic, queue_name);
-        let payload = serde_json::to_string(&MqttCupsPrintQueueStatus::from(&queue))?;
+        let payload = serde_json::to_string(&MqttCupsPrintQueueStatus::from(&queue)).with_whatever_context(|_| format!("Could not serialize CUPS queue status message for topic {topic}"))?;
         publish(&topic, payload)?;
 
         if settings.mqtt.ha.enable_discovery {
@@ -186,7 +187,7 @@ fn publish_cups_queue_statuses(print_queues: Vec<IppPrintQueueState>) -> Result<
     Ok(())
 }
 
-fn publish_ha_sensor_discovery_topic(queue: &IppPrintQueueState, integration_name: &str) -> Result<()> {
+fn publish_ha_sensor_discovery_topic(queue: &IppPrintQueueState, integration_name: &str) -> Result<(), Whatever> {
     let settings = get_settings();
     let case_converter = Converter::new().set_pattern(pattern::sentence).set_delim(" ");
 
@@ -203,7 +204,7 @@ fn publish_ha_sensor_discovery_topic(queue: &IppPrintQueueState, integration_nam
             sw_version: None,
             via_device: Some(format!("{}_cups_server", settings.mqtt.ha.component_id)),
         },
-    })?;
+    }).with_whatever_context(|_| format!("Could not serialize HA device discovery message for topic {topic}"))?;
     Ok(publish(&topic, payload)?)
 }
 
@@ -211,9 +212,9 @@ fn publish_ha_sensor_discovery_topic(queue: &IppPrintQueueState, integration_nam
 // Helpers //
 // /////// //
 
-fn publish(topic: &str, payload: String) -> Result<()> {
+fn publish(topic: &str, payload: String) -> Result<(), Whatever> {
     let last_published = get_last_published_mqtt_messages().get(topic);
-    Ok(if last_published.is_none() || !last_published.context("Failed to get last published message")?.eq(&payload) {
+    Ok(if last_published.is_none() || !last_published.with_whatever_context(|| "Failed to get last published message")?.eq(&payload) {
         get_last_published_mqtt_messages().insert(topic.to_owned(), payload.clone());
         get_mqtt_client().publish(topic, payload.as_bytes())?;
     })
