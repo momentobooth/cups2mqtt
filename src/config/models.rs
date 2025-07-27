@@ -1,4 +1,5 @@
 use serde_derive::Deserialize;
+use std::time::Duration;
 
 // When changing anything here, make sure to add
 // #[serde(alias = "ihavenounderscores")]
@@ -45,8 +46,8 @@ pub struct Cups {
 #[derive(Debug, Deserialize)]
 #[allow(unused)]
 pub struct Settings {
-    #[serde(alias = "pollingintervalms")]
-    pub polling_interval_ms: u32,
+    #[serde(alias = "pollinginterval", with = "humantime_serde")]
+    pub polling_interval: Duration,
     pub mqtt: Mqtt,
     pub cups: Cups,
     #[serde(alias = "sentrydsn")]
