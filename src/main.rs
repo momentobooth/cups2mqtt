@@ -1,15 +1,17 @@
-use std::{str::FromStr, sync::OnceLock};
+use std::sync::OnceLock;
 
 use config::models::Settings;
-use backon::{BlockingRetryable, ExponentialBuilder};
+use backon::{ExponentialBuilder, Retryable};
 use convert_case::{Converter, pattern};
 use cups_client::models::IppPrintQueueState;
 use dashmap::DashMap;
-use ipp::prelude::Uri;
 use log::{debug, error, info};
 use mqtt_client::{client::MqttClient, models::*};
-use snafu::{OptionExt, ResultExt, Whatever};
+use snafu::{OptionExt, ResultExt, Snafu};
 use url::Url;
+use tokio::{task::JoinSet, time::sleep};
+
+use crate::cups_client::client::CupsError;
 
 mod cups_client;
 mod config;
@@ -30,7 +32,8 @@ pub fn get_last_published_mqtt_messages() -> &'static DashMap<String, String> {
     LOG_FILE_REGEX.get_or_init(|| DashMap::new())
 }
 
-fn main() {
+#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
+async fn main() {
     // As Rust has no native support for .env files,
     // we use the dotenv_flow crate to import to actual ENV vars.
     let dotenv_path = dotenv_flow::dotenv_flow();
@@ -45,29 +48,35 @@ fn main() {
     let settings = get_settings();
     info!("Running with config: {:#?}", settings);
 
-    loop {
-        let cups_print_queues = publish_cups_queue_statuses_and_log_result.retry(ExponentialBuilder::default().with_factor(4.0)).call();
-        match cups_print_queues {
-            Ok(_) => {
-                std::thread::sleep(settings.polling_interval);
-            },
-            Err(_) => {
-                error!("Too many failures, waiting 30s before trying again");
-                failure_wait();
-            }
+    let mut set = JoinSet::new();
+
+    set.spawn(async {
+        loop {
+            let cups_print_queues = publish_cups_queue_statuses_and_log_result.retry(ExponentialBuilder::default().with_factor(4.0)).await;
+                match cups_print_queues {
+                Ok(_) => {
+                    sleep(settings.polling_interval).await;
+                },
+                Err(_) => {
+                    error!("Too many failures, waiting 30s before trying again");
+                    failure_wait().await;
+                }
+            };
         }
-    }
+    });
+
+    while let Some(_cert) = set.join_next().await {};
 }
 
-fn failure_wait() {
+async fn failure_wait() {
     error!("Too many failues, waiting 30 seconds before retrying.");
-    std::thread::sleep(std::time::Duration::from_secs(30));
+    sleep(std::time::Duration::from_secs(30)).await;
 }
 
-fn publish_cups_queue_statuses_and_log_result() -> Result<(), Whatever> {
+async fn publish_cups_queue_statuses_and_log_result() -> Result<(), ApplicationError> {
     let settings = get_settings();
-    let url = cups_client::client::build_cups_url(&settings.cups, None);
-    let print_queues_result = cups_client::client::get_print_queues(url?.clone(), settings.cups.ignore_tls_errors);
+    let url = cups_client::client::build_cups_url(&settings.cups, None).with_whatever_context(|_| "Could not build CUPS URL")?;
+    let print_queues_result = cups_client::client::get_print_queues(url, settings.cups.ignore_tls_errors).await;
 
     match &print_queues_result {
         Ok(print_queues) => {
@@ -91,7 +100,7 @@ fn publish_cups_queue_statuses_and_log_result() -> Result<(), Whatever> {
     match print_queues_result {
         Ok(print_queues) => {
             // CUPS online, publish print queues.
-            match publish_cups_queue_statuses(print_queues) {
+            match publish_cups_queue_statuses(&print_queues) {
                 Ok(()) => {
                     debug!("Published queue statuses");
                     Ok(())
@@ -104,7 +113,7 @@ fn publish_cups_queue_statuses_and_log_result() -> Result<(), Whatever> {
         },
         Err(e) => {
             // CUPS offline, publish server status only.
-            Err(e)
+            Err(e).with_whatever_context(|_| "Count not publish queue status due to CUPS error")
         }
     }
 }
@@ -113,7 +122,7 @@ fn publish_cups_queue_statuses_and_log_result() -> Result<(), Whatever> {
 // Print server publish //
 // //////////////////// //
 
-fn publish_cups_server_status(print_queues_result: &Result<Vec<IppPrintQueueState>, Whatever>) -> Result<(), Whatever> {
+fn publish_cups_server_status(print_queues_result: &Result<Vec<IppPrintQueueState>, CupsError>) -> Result<(), ApplicationError> {
     let settings = get_settings();
 
     let cups_version = match print_queues_result {
@@ -137,7 +146,7 @@ fn publish_cups_server_status(print_queues_result: &Result<Vec<IppPrintQueueStat
     Ok(())
 }
 
-fn publish_ha_bridge_discovery_topic(cups_version: &Option<String>, integration_name: &str, sensor_name: &str) -> Result<(), Whatever> {
+fn publish_ha_bridge_discovery_topic(cups_version: &Option<String>, integration_name: &str, sensor_name: &str) -> Result<(), ApplicationError> {
     let settings = get_settings();
 
     let url = Url::parse(&settings.cups.uri).with_whatever_context(|_| format!("Could not parse CUPS URI {}", settings.cups.uri))?.clone();
@@ -164,14 +173,14 @@ fn publish_ha_bridge_discovery_topic(cups_version: &Option<String>, integration_
 // Print queue publish //
 // /////////////////// //
 
-fn publish_cups_queue_statuses(print_queues: Vec<IppPrintQueueState>) -> Result<(), Whatever> {
+fn publish_cups_queue_statuses(print_queues: &Vec<IppPrintQueueState>) -> Result<(), ApplicationError> {
     let settings = get_settings();
 
     for queue in print_queues {
         let queue_name = queue.queue_name.clone();
 
         let topic = format!("{}/{}", settings.mqtt.root_topic, queue_name);
-        let payload = serde_json::to_string(&MqttCupsPrintQueueStatus::from(&queue)).with_whatever_context(|_| format!("Could not serialize CUPS queue status message for topic {topic}"))?;
+        let payload = serde_json::to_string(&MqttCupsPrintQueueStatus::from(queue)).with_whatever_context(|_| format!("Could not serialize CUPS queue status message for topic {topic}"))?;
         publish(&topic, payload)?;
 
         if settings.mqtt.ha.enable_discovery {
@@ -187,7 +196,7 @@ fn publish_cups_queue_statuses(print_queues: Vec<IppPrintQueueState>) -> Result<
     Ok(())
 }
 
-fn publish_ha_sensor_discovery_topic(queue: &IppPrintQueueState, integration_name: &str) -> Result<(), Whatever> {
+fn publish_ha_sensor_discovery_topic(queue: &IppPrintQueueState, integration_name: &str) -> Result<(), ApplicationError> {
     let settings = get_settings();
     let case_converter = Converter::new().set_pattern(pattern::sentence).set_delim(" ");
 
@@ -212,10 +221,24 @@ fn publish_ha_sensor_discovery_topic(queue: &IppPrintQueueState, integration_nam
 // Helpers //
 // /////// //
 
-fn publish(topic: &str, payload: String) -> Result<(), Whatever> {
+fn publish(topic: &str, payload: String) -> Result<(), ApplicationError> {
     let last_published = get_last_published_mqtt_messages().get(topic);
     Ok(if last_published.is_none() || !last_published.with_whatever_context(|| "Failed to get last published message")?.eq(&payload) {
         get_last_published_mqtt_messages().insert(topic.to_owned(), payload.clone());
-        get_mqtt_client().publish(topic, payload.as_bytes())?;
+        get_mqtt_client().publish(topic, payload.as_bytes()).with_whatever_context(|_| "Could not publish to MQTT")?;
     })
+}
+
+// ////// //
+// Errors //
+// ////// //
+
+#[derive(Debug, Snafu)]
+pub enum ApplicationError {
+    #[snafu(whatever, display("{message}"))]
+    Whatever {
+        message: String,
+        #[snafu(source(from(Box<dyn std::error::Error + Send + Sync>, Some)))]
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
 }

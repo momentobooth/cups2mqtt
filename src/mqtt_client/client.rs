@@ -1,5 +1,5 @@
 use rumqttc::{tokio_rustls::rustls::ClientConfig, Client, MqttOptions, QoS};
-use snafu::{ResultExt, Whatever};
+use snafu::{ResultExt, Snafu};
 use std::{sync::Arc, thread, time::Duration};
 
 use crate::config::models::Mqtt;
@@ -38,7 +38,21 @@ impl MqttClient {
         Self { client }
     }
 
-    pub fn publish(&self, topic: &str, payload: &[u8]) -> Result<(), Whatever> {
+    pub fn publish(&self, topic: &str, payload: &[u8]) -> Result<(), MqttError> {
         Ok(self.client.publish(topic, QoS::AtLeastOnce, true, payload).with_whatever_context(|_| format!("Could not publish to topic {topic}"))?)
     }
+}
+
+// ////// //
+// Errors //
+// ////// //
+
+#[derive(Debug, Snafu)]
+pub enum MqttError {
+    #[snafu(whatever, display("{message}"))]
+    Whatever {
+        message: String,
+        #[snafu(source(from(Box<dyn std::error::Error + Send + Sync>, Some)))]
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
 }
