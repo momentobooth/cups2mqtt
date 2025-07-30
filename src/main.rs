@@ -87,7 +87,7 @@ async fn publish_cups_queue_statuses_and_log_result() -> Result<(), ApplicationE
         }
     }
 
-    match publish_cups_server_status(&print_queues_result) {
+    match publish_cups_server_status(&print_queues_result).await {
         Ok(_) => {
             debug!("Published server status");
         },
@@ -100,7 +100,7 @@ async fn publish_cups_queue_statuses_and_log_result() -> Result<(), ApplicationE
     match print_queues_result {
         Ok(print_queues) => {
             // CUPS online, publish print queues.
-            match publish_cups_queue_statuses(&print_queues) {
+            match publish_cups_queue_statuses(&print_queues).await {
                 Ok(()) => {
                     debug!("Published queue statuses");
                     Ok(())
@@ -122,7 +122,7 @@ async fn publish_cups_queue_statuses_and_log_result() -> Result<(), ApplicationE
 // Print server publish //
 // //////////////////// //
 
-fn publish_cups_server_status(print_queues_result: &Result<Vec<IppPrintQueueState>, CupsError>) -> Result<(), ApplicationError> {
+async fn publish_cups_server_status(print_queues_result: &Result<Vec<IppPrintQueueState>, CupsError>) -> Result<(), ApplicationError> {
     let settings = get_settings();
 
     let cups_version = match print_queues_result {
@@ -136,17 +136,17 @@ fn publish_cups_server_status(print_queues_result: &Result<Vec<IppPrintQueueStat
         cups_version: cups_version.clone(),
         cups2mqtt_version: env!("CARGO_PKG_VERSION").to_owned(),
     }).with_whatever_context(|_| format!("Could not serialize CUPS server status message for topic {topic}"))?;
-    publish(&topic, payload)?;
+    publish(&topic, payload).await?;
 
     if settings.mqtt.ha.enable_discovery {
-        publish_ha_bridge_discovery_topic(&cups_version, "cups_version", "CUPS version")?;
-        publish_ha_bridge_discovery_topic(&cups_version, "cups2mqtt_version", "CUPS2MQTT version")?;
+        publish_ha_bridge_discovery_topic(&cups_version, "cups_version", "CUPS version").await?;
+        publish_ha_bridge_discovery_topic(&cups_version, "cups2mqtt_version", "CUPS2MQTT version").await?;
     }
 
     Ok(())
 }
 
-fn publish_ha_bridge_discovery_topic(cups_version: &Option<String>, integration_name: &str, sensor_name: &str) -> Result<(), ApplicationError> {
+async fn publish_ha_bridge_discovery_topic(cups_version: &Option<String>, integration_name: &str, sensor_name: &str) -> Result<(), ApplicationError> {
     let settings = get_settings();
 
     let url = Url::parse(&settings.cups.uri).with_whatever_context(|_| format!("Could not parse CUPS URI {}", settings.cups.uri))?.clone();
@@ -166,14 +166,13 @@ fn publish_ha_bridge_discovery_topic(cups_version: &Option<String>, integration_
             via_device: None,
         },
     }).with_whatever_context(|_| format!("Could not serialize HA bridge discovery message for topic {topic}"))?;
-    Ok(publish(&topic, payload)?)
+    Ok(publish(&topic, payload).await?)
 }
 
 // /////////////////// //
 // Print queue publish //
 // /////////////////// //
-
-fn publish_cups_queue_statuses(print_queues: &Vec<IppPrintQueueState>) -> Result<(), ApplicationError> {
+async fn publish_cups_queue_statuses(print_queues: &Vec<IppPrintQueueState>) -> Result<(), ApplicationError> {
     let settings = get_settings();
 
     for queue in print_queues {
@@ -181,22 +180,22 @@ fn publish_cups_queue_statuses(print_queues: &Vec<IppPrintQueueState>) -> Result
 
         let topic = format!("{}/{}", settings.mqtt.root_topic, queue_name);
         let payload = serde_json::to_string(&MqttCupsPrintQueueStatus::from(queue)).with_whatever_context(|_| format!("Could not serialize CUPS queue status message for topic {topic}"))?;
-        publish(&topic, payload)?;
+        publish(&topic, payload).await?;
 
         if settings.mqtt.ha.enable_discovery {
-            publish_ha_sensor_discovery_topic(&queue, "name")?;
-            publish_ha_sensor_discovery_topic(&queue, "description")?;
-            publish_ha_sensor_discovery_topic(&queue, "state")?;
-            publish_ha_sensor_discovery_topic(&queue, "job_count")?;
-            publish_ha_sensor_discovery_topic(&queue, "state_message")?;
-            publish_ha_sensor_discovery_topic(&queue, "state_reason")?;
+            publish_ha_sensor_discovery_topic(&queue, "name").await?;
+            publish_ha_sensor_discovery_topic(&queue, "description").await?;
+            publish_ha_sensor_discovery_topic(&queue, "state").await?;
+            publish_ha_sensor_discovery_topic(&queue, "job_count").await?;
+            publish_ha_sensor_discovery_topic(&queue, "state_message").await?;
+            publish_ha_sensor_discovery_topic(&queue, "state_reason").await?;
         }
     }
 
     Ok(())
 }
 
-fn publish_ha_sensor_discovery_topic(queue: &IppPrintQueueState, integration_name: &str) -> Result<(), ApplicationError> {
+async fn publish_ha_sensor_discovery_topic(queue: &IppPrintQueueState, integration_name: &str) -> Result<(), ApplicationError> {
     let settings = get_settings();
     let case_converter = Converter::new().set_pattern(pattern::sentence).set_delim(" ");
 
@@ -214,18 +213,18 @@ fn publish_ha_sensor_discovery_topic(queue: &IppPrintQueueState, integration_nam
             via_device: Some(format!("{}_cups_server", settings.mqtt.ha.component_id)),
         },
     }).with_whatever_context(|_| format!("Could not serialize HA device discovery message for topic {topic}"))?;
-    Ok(publish(&topic, payload)?)
+    Ok(publish(&topic, payload).await?)
 }
 
 // /////// //
 // Helpers //
 // /////// //
 
-fn publish(topic: &str, payload: String) -> Result<(), ApplicationError> {
+async fn publish(topic: &str, payload: String) -> Result<(), ApplicationError> {
     let last_published = get_last_published_mqtt_messages().get(topic);
     Ok(if last_published.is_none() || !last_published.with_whatever_context(|| "Failed to get last published message")?.eq(&payload) {
         get_last_published_mqtt_messages().insert(topic.to_owned(), payload.clone());
-        get_mqtt_client().publish(topic, payload.as_bytes()).with_whatever_context(|_| "Could not publish to MQTT")?;
+        get_mqtt_client().publish(topic, payload.as_bytes()).await.with_whatever_context(|_| "Could not publish to MQTT")?;
     })
 }
 

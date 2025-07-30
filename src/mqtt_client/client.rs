@@ -1,13 +1,14 @@
-use rumqttc::{tokio_rustls::rustls::ClientConfig, Client, MqttOptions, QoS};
+use rumqttc::{tokio_rustls::rustls::ClientConfig, AsyncClient, MqttOptions, QoS};
 use snafu::{ResultExt, Snafu};
-use std::{sync::Arc, thread, time::Duration};
+use tokio::task;
+use std::{sync::Arc, time::Duration};
 
 use crate::config::models::Mqtt;
 
 use super::fun_with_tls::{get_system_certs, NoopServerCertVerifier};
 
 pub struct MqttClient {
-    client: Client,
+    client: AsyncClient,
 }
 
 impl MqttClient {
@@ -29,17 +30,19 @@ impl MqttClient {
             })
             .set_keep_alive(Duration::from_secs(10)).to_owned();
 
-        let (client, mut connection) = Client::new(mqtt_options, 10);
+        let (client, mut eventloop) = AsyncClient::new(mqtt_options, 10);
 
-        thread::spawn(move || {
-            for (_i, _notification) in connection.iter().enumerate() {}
+        task::spawn(async move {
+            loop {
+                let _notification = eventloop.poll().await.unwrap();
+            }
         });
 
         Self { client }
     }
 
-    pub fn publish(&self, topic: &str, payload: &[u8]) -> Result<(), MqttError> {
-        Ok(self.client.publish(topic, QoS::AtLeastOnce, true, payload).with_whatever_context(|_| format!("Could not publish to topic {topic}"))?)
+    pub async fn publish(&self, topic: &str, payload: &[u8]) -> Result<(), MqttError> {
+        Ok(self.client.publish(topic, QoS::AtLeastOnce, true, payload).await.with_whatever_context(|_| format!("Could not publish to topic {topic}"))?)
     }
 }
 
