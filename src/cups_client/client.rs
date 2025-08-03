@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::{collections::HashMap, io::Cursor};
 
 use ipp::prelude::*;
 use snafu::{OptionExt, ResultExt, Snafu};
@@ -29,7 +29,38 @@ pub async fn get_print_queues(uri: String, ignore_tls_errors: bool) -> Result<Ve
         let printer_make = group["printer-make-and-model"].value().to_string().clone();
         let state_reason = group["printer-state-reasons"].value().to_string().clone();
         let cups_version = group["cups-version"].value().to_string().clone();
-        vec.push(IppPrintQueueState { queue_name, description, printer_make, state, job_count, state_message, state_reason, cups_version });
+
+        let mut markers = Vec::<PrinterMarker>::new();
+
+        // Here use `.get` instead of the index to avoid a crash, as
+        // these values are not always available for various reasons.
+        let marker_types = get_ipp_strings(&group, "marker-types");
+        let marker_colors = get_ipp_strings(&group, "marker-colors");
+        let marker_names = get_ipp_strings(&group, "marker-names");
+        let marker_levels = get_ipp_ints(&group, "marker-levels");
+
+        if marker_types.is_ok() && marker_colors.is_ok() && marker_names.is_ok() && marker_levels.is_ok() {
+            let marker_types = marker_types.unwrap();
+            let marker_colors = marker_colors.unwrap();
+            let marker_names = marker_names.unwrap();
+            let marker_levels = marker_levels.unwrap();
+
+            for i in 0..marker_types.len() {
+                let marker_level = marker_levels[i];
+
+                markers.push(PrinterMarker {
+                    marker_type: marker_types[i].clone(),
+                    color: marker_colors[i].clone(),
+                    name: marker_names[i].to_string(),
+                    level: match marker_level {
+                        -1 => None,
+                        _ => Some(marker_level as u32),
+                    },
+                });
+            }
+        }
+
+        vec.push(IppPrintQueueState { queue_name, description, printer_make, state, job_count, state_message, state_reason, cups_version, markers });
     }
 
     Ok(vec)
@@ -59,6 +90,26 @@ pub async fn print_job(uri: String, ignore_tls_errors: bool, job_name: String, j
 // /////// //
 // Helpers //
 // /////// //
+
+fn get_ipp_strings(ipp_group: &HashMap<String, IppAttribute>, value_name: &str) -> Result<Vec<String>, CupsError> {
+    Ok(
+        ipp_group.get(value_name)
+            .with_whatever_context(|| format!("Value {value_name} not found in group"))?
+            .value().clone().as_array()
+            .with_whatever_context(|| format!("Could not read IPP value as array"))?
+            .iter().map(|f| f.to_string()).collect()
+    )
+}
+
+fn get_ipp_ints(ipp_group: &HashMap<String, IppAttribute>, value_name: &str) -> Result<Vec<i32>, CupsError> {
+    Ok(
+        ipp_group.get(value_name)
+            .with_whatever_context(|| format!("Value {value_name} not found in group"))?
+            .value().clone().as_array()
+            .with_whatever_context(|| format!("Could not read IPP value as array"))?
+            .iter().map(|f| f.as_integer().unwrap().to_owned()).collect()
+    )
+}
 
 pub fn build_cups_url(cups_settings: &Cups, queue_id: Option<&String>) -> Result<String, CupsError> {
     let mut cups_url = Url::parse(&cups_settings.uri).with_whatever_context(|_| "Could not parse CUPS URI")?;
