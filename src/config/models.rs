@@ -42,6 +42,8 @@ pub struct Cups {
     pub ignore_tls_errors: bool,
     pub username: String,
     pub password: String,
+    #[serde(alias = "reportsupplylevelsschedule")]
+    pub report_supply_levels_schedule: Option<TimeSchedule>,
 }
 
 #[derive(Debug, Deserialize)]

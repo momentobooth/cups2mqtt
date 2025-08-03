@@ -9,13 +9,15 @@ use log::{debug, error, info};
 use mqtt_client::{client::MqttClient, models::*};
 use snafu::{OptionExt, ResultExt, Snafu};
 use url::Url;
-use tokio::{task::JoinSet, time::sleep};
+use tokio::{sync::Mutex, task::JoinSet, time::sleep};
 
 use crate::cups_client::client::CupsError;
 
 mod cups_client;
 mod config;
 mod mqtt_client;
+
+static PRINT_QUEUES: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
 
 pub fn get_settings() -> &'static Settings {
     static LOG_FILE_REGEX: OnceLock<Settings> = OnceLock::new();
@@ -49,23 +51,7 @@ async fn main() {
     info!("Running with config: {:#?}", settings);
 
     let mut set = JoinSet::new();
-
-    set.spawn(async {
-        loop {
-            let cups_print_queues = publish_cups_queue_statuses_and_log_result.retry(ExponentialBuilder::default().with_factor(4.0)).await;
-                match cups_print_queues {
-                Ok(_) => {
-                    let duration = settings.polling_schedule.get_duration_till_next_occurrence().unwrap();
-                    debug!("Next CUPS polling will be in {}", humantime::Duration::from(duration));
-                    sleep(duration).await;
-                },
-                Err(_) => {
-                    error!("Too many failures, waiting 30s before trying again");
-                    failure_wait().await;
-                }
-            };
-        }
-    });
+    set.spawn(print_queue_status_reporting_loop(settings));
 
     while let Some(_cert) = set.join_next().await {};
 }
@@ -83,6 +69,23 @@ async fn publish_cups_queue_statuses_and_log_result() -> Result<(), ApplicationE
     match &print_queues_result {
         Ok(print_queues) => {
             debug!("Got print queues: {}", print_queues.len());
+
+            // Update the list of print queues used by the supply levels request loop. Start the loop if not already started.
+            if settings.cups.report_supply_levels_schedule.is_some() {
+                let print_queues = print_queues.iter().map(|f| f.queue_name.clone()).collect::<Vec<_>>();
+                if PRINT_QUEUES.get().is_none() {
+                    // Both set the initial list and start the supply levels request loop.
+                    PRINT_QUEUES.set(Mutex::new(print_queues)).unwrap();
+
+                    info!("Starting supply levels request loop");
+                    tokio::spawn(supply_levels_request_loop(settings));
+                } else {
+                    // Loop already started, just update the list.
+                    let mut queues_guard = PRINT_QUEUES.get().unwrap().lock().await;
+                    *queues_guard = print_queues;
+                    debug!("Supply levels queue list updated");
+                }
+            }
         },
         Err(e) => {
             error!("Failed to get print queues (CUPS offline?): {}", e);
@@ -120,6 +123,44 @@ async fn publish_cups_queue_statuses_and_log_result() -> Result<(), ApplicationE
     }
 }
 
+// ///// //
+// Loops //
+// ///// //
+
+async fn print_queue_status_reporting_loop(settings: &Settings) {
+    loop {
+        let cups_print_queues = publish_cups_queue_statuses_and_log_result.retry(ExponentialBuilder::default().with_factor(4.0)).await;
+            match cups_print_queues {
+            Ok(_) => {
+                let duration = settings.polling_schedule.get_duration_till_next_occurrence().unwrap();
+                debug!("Next print queue status report run will be in {}", humantime::Duration::from(duration));
+                sleep(duration).await;
+            },
+            Err(_) => {
+                error!("Too many queue status reporting failures, waiting 30s before trying again");
+                failure_wait().await;
+            }
+        };
+    }
+}
+
+async fn supply_levels_request_loop(settings: &Settings) {
+    loop {
+        debug!("Support levels loop run started");
+        for print_queue in PRINT_QUEUES.get().unwrap().lock().await.iter() {
+            debug!("Querying support levels for queue {print_queue}");
+            let print_queue_uri = cups_client::client::build_cups_url(&settings.cups, Some(print_queue)).unwrap();
+            match cups_client::client::report_supply_levels(print_queue_uri, settings.cups.ignore_tls_errors).await {
+                Ok(_) => debug!("Successfully queried support levels for queue {print_queue}"),
+                Err(error) => debug!("Error while querying support levels for queue: {error}"),
+            }
+        }
+
+        let sleep_for = settings.cups.report_supply_levels_schedule.as_ref().unwrap().get_duration_till_next_occurrence().unwrap();
+        sleep(sleep_for).await;
+    }
+}
+
 // //////////////////// //
 // Print server publish //
 // //////////////////// //
@@ -128,9 +169,9 @@ async fn publish_cups_server_status(print_queues_result: &Result<Vec<IppPrintQue
     let settings = get_settings();
 
     let cups_version = match print_queues_result {
-            Ok(print_queues) => print_queues.first().map(|q| q.cups_version.clone()),
-            Err(_) => None,
-        };
+        Ok(print_queues) => print_queues.first().map(|q| q.cups_version.clone()),
+        Err(_) => None,
+    };
 
     let topic = format!("{}/{}", settings.mqtt.root_topic, "cups_server");
     let payload = serde_json::to_string(&MqttCupsServerStatus {
@@ -174,6 +215,7 @@ async fn publish_ha_bridge_discovery_topic(cups_version: &Option<String>, integr
 // /////////////////// //
 // Print queue publish //
 // /////////////////// //
+
 async fn publish_cups_queue_statuses(print_queues: &Vec<IppPrintQueueState>) -> Result<(), ApplicationError> {
     let settings = get_settings();
 

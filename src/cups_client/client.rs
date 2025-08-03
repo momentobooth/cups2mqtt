@@ -60,7 +60,7 @@ pub async fn print_job(uri: String, ignore_tls_errors: bool, job_name: String, j
 // Helpers //
 // /////// //
 
-pub fn build_cups_url(cups_settings: &Cups, queue_id: Option<String>) -> Result<String, CupsError> {
+pub fn build_cups_url(cups_settings: &Cups, queue_id: Option<&String>) -> Result<String, CupsError> {
     let mut cups_url = Url::parse(&cups_settings.uri).with_whatever_context(|_| "Could not parse CUPS URI")?;
     if !cups_settings.username.is_empty() && !cups_settings.password.is_empty() {
         cups_url.set_username(&cups_settings.username).unwrap();
