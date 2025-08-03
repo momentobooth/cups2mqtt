@@ -55,7 +55,9 @@ async fn main() {
             let cups_print_queues = publish_cups_queue_statuses_and_log_result.retry(ExponentialBuilder::default().with_factor(4.0)).await;
                 match cups_print_queues {
                 Ok(_) => {
-                    sleep(settings.polling_interval).await;
+                    let duration = settings.polling_schedule.get_duration_till_next_occurrence().unwrap();
+                    debug!("Next CUPS polling will be in {}", humantime::Duration::from(duration));
+                    sleep(duration).await;
                 },
                 Err(_) => {
                     error!("Too many failures, waiting 30s before trying again");

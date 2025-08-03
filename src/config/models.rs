@@ -1,5 +1,6 @@
 use serde_derive::Deserialize;
-use std::time::Duration;
+
+use crate::config::schedule::TimeSchedule;
 
 // When changing anything here, make sure to add
 // #[serde(alias = "ihavenounderscores")]
@@ -46,8 +47,8 @@ pub struct Cups {
 #[derive(Debug, Deserialize)]
 #[allow(unused)]
 pub struct Settings {
-    #[serde(alias = "pollinginterval", with = "humantime_serde")]
-    pub polling_interval: Duration,
+    #[serde(alias = "pollingschedule")]
+    pub polling_schedule: TimeSchedule,
     pub mqtt: Mqtt,
     pub cups: Cups,
     #[serde(alias = "sentrydsn")]
