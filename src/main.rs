@@ -227,27 +227,33 @@ async fn publish_cups_queue_statuses(print_queues: &Vec<IppPrintQueueState>) -> 
         publish(&topic, payload).await?;
 
         if settings.mqtt.ha.enable_discovery {
-            publish_ha_sensor_discovery_topic(&queue, "name").await?;
-            publish_ha_sensor_discovery_topic(&queue, "description").await?;
-            publish_ha_sensor_discovery_topic(&queue, "state").await?;
-            publish_ha_sensor_discovery_topic(&queue, "job_count").await?;
-            publish_ha_sensor_discovery_topic(&queue, "state_message").await?;
-            publish_ha_sensor_discovery_topic(&queue, "state_reason").await?;
+            publish_ha_sensor_discovery_topic(&queue, "name", None, None).await?;
+            publish_ha_sensor_discovery_topic(&queue, "description", None, None).await?;
+            publish_ha_sensor_discovery_topic(&queue, "state", None, None).await?;
+            publish_ha_sensor_discovery_topic(&queue, "job_count", None, None).await?;
+            publish_ha_sensor_discovery_topic(&queue, "state_message", None, None).await?;
+            publish_ha_sensor_discovery_topic(&queue, "state_reason", None, None).await?;
+            for (i, marker) in queue.markers.iter().enumerate() {
+                publish_ha_sensor_discovery_topic(&queue, &format!("markers[{i}].type"), Some(&format!("marker{i}_type")), Some(&format!("{} type", marker.name))).await?;
+                publish_ha_sensor_discovery_topic(&queue, &format!("markers[{i}].color"), Some(&format!("marker{i}_color")), Some(&format!("{} color", marker.name))).await?;
+                publish_ha_sensor_discovery_topic(&queue, &format!("markers[{i}].level"), Some(&format!("marker{i}_level")), Some(&format!("{} level", marker.name))).await?;
+            }
         }
     }
 
     Ok(())
 }
 
-async fn publish_ha_sensor_discovery_topic(queue: &IppPrintQueueState, integration_name: &str) -> Result<(), ApplicationError> {
+async fn publish_ha_sensor_discovery_topic(queue: &IppPrintQueueState, integration_name: &str, topic_name_override: Option<&str>, name_override: Option<&str>) -> Result<(), ApplicationError> {
     let settings = get_settings();
     let case_converter = Converter::new().set_pattern(pattern::sentence).set_delim(" ");
+    let sensor_topic = topic_name_override.unwrap_or(integration_name);
 
-    let topic = format!("{}/sensor/{}_{}/{}/config", settings.mqtt.ha.discovery_topic_prefix, settings.mqtt.ha.component_id, queue.queue_name, integration_name);
+    let topic = format!("{}/sensor/{}_{}/{}/config", settings.mqtt.ha.discovery_topic_prefix, settings.mqtt.ha.component_id, queue.queue_name, sensor_topic);
     let payload = serde_json::to_string(&HomeAssistantDiscoverySensorPayload {
-        name: case_converter.convert(integration_name.to_owned()),
+        name: name_override.unwrap_or(&case_converter.convert(integration_name.to_owned())).to_owned(),
         state_topic: format!("{}/{}", settings.mqtt.root_topic, queue.queue_name),
-        unique_id: format!("{}_{}_{}", queue.queue_name, integration_name, settings.mqtt.ha.component_id),
+        unique_id: format!("{}_{}_{}", queue.queue_name, sensor_topic, settings.mqtt.ha.component_id),
         value_template: format!("{{{{ value_json.{} }}}}", integration_name),
         device: HomeAssistantDevice {
             identifiers: vec![format!("{}_{}", settings.mqtt.ha.component_id, queue.queue_name.to_owned())],

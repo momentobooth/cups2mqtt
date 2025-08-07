@@ -1,7 +1,7 @@
 use ipp::model::PrinterState;
 use serde::{Deserialize, Serialize};
 
-use crate::cups_client::models::IppPrintQueueState;
+use crate::cups_client::models::{IppPrintQueueState, IppPrinterMarker};
 
 // ////// //
 // Status //
@@ -14,7 +14,6 @@ pub struct MqttCupsServerStatus {
     pub cups2mqtt_version: String,
 }
 
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MqttCupsPrintQueueStatus {
     pub name: String,
@@ -24,6 +23,16 @@ pub struct MqttCupsPrintQueueStatus {
     pub job_count: i32,
     pub state_message: String,
     pub state_reason: String,
+    pub markers: Vec<MqttCupsPrinterMarker>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MqttCupsPrinterMarker {
+    #[serde(rename = "type")]
+    pub marker_type: String,
+    pub color: Option<String>,
+    pub name: String,
+    pub level: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -47,6 +56,23 @@ impl From<&IppPrintQueueState> for MqttCupsPrintQueueStatus {
             job_count: status.job_count,
             state_message: status.state_message.clone(),
             state_reason: status.state_reason.clone(),
+            markers: status.markers.iter().map(|m| MqttCupsPrinterMarker {
+                marker_type: m.marker_type.clone(),
+                color: m.color.clone(),
+                name: m.name.clone(),
+                level: m.level,
+            }).collect()
+        }
+    }
+}
+
+impl From<&IppPrinterMarker> for MqttCupsPrinterMarker {
+    fn from(status: &IppPrinterMarker) -> Self {
+        MqttCupsPrinterMarker {
+            marker_type: status.marker_type.clone(),
+            color: status.color.clone(),
+            name: status.name.clone(),
+            level: status.level,
         }
     }
 }

@@ -10,13 +10,13 @@ pub struct IppPrintQueueState {
     pub state_message: String,
     pub state_reason: String,
     pub cups_version: String,
-    pub markers: Vec<PrinterMarker>,
+    pub markers: Vec<IppPrinterMarker>,
 }
 
 #[derive(Debug)]
-pub struct PrinterMarker {
+pub struct IppPrinterMarker {
     pub marker_type: String,
-    pub color: String,
+    pub color: Option<String>,
     pub name: String,
     pub level: Option<u32>,
 }
