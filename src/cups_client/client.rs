@@ -30,7 +30,7 @@ pub async fn get_print_queues(uri: String, ignore_tls_errors: bool) -> Result<Ve
         let state_reason = group["printer-state-reasons"].value().to_string().clone();
         let cups_version = group["cups-version"].value().to_string().clone();
 
-        let mut markers = Vec::<PrinterMarker>::new();
+        let mut markers = Vec::<IppPrinterMarker>::new();
 
         // Here use `.get` instead of the index to avoid a crash, as
         // these values are not always available for various reasons.
@@ -47,10 +47,14 @@ pub async fn get_print_queues(uri: String, ignore_tls_errors: bool) -> Result<Ve
 
             for i in 0..marker_types.len() {
                 let marker_level = marker_levels[i];
+                let marker_color = marker_colors[i].clone();
 
-                markers.push(PrinterMarker {
+                markers.push(IppPrinterMarker {
                     marker_type: marker_types[i].clone(),
-                    color: marker_colors[i].clone(),
+                    color: match &marker_color {
+                        _ if marker_color == "none" => None,
+                        _ => Some(marker_color),
+                    },
                     name: marker_names[i].to_string(),
                     level: match marker_level {
                         -1 => None,
