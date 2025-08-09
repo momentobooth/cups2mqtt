@@ -339,6 +339,9 @@ name = "bytes"
 version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "bytestring"
@@ -379,6 +382,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap"
+version = "4.5.43"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50fd97c9dc2399518aa331917ac6f274280ec5eb34e555dd291899745c48ec6f"
+dependencies = [
+ "clap_builder",
+ "clap_derive",
+]
+
+[[package]]
+name = "clap_builder"
+version = "4.5.43"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c35b5830294e1fa0462034af85cc95225a4cb07092c088c55bda3147cfcd8f65"
+dependencies = [
+ "anstream",
+ "anstyle",
+ "clap_lex",
+ "strsim",
+]
+
+[[package]]
+name = "clap_derive"
+version = "4.5.41"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef4f52386a59ca4c860f7393bcf8abd8dfd91ecccc0f774635ff68e92eeef491"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "clap_lex"
+version = "0.7.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
+
+[[package]]
 name = "colog"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -415,7 +458,7 @@ dependencies = [
  "convert_case 0.6.0",
  "json5",
  "pathdiff",
- "ron",
+ "ron 0.8.1",
  "rust-ini",
  "serde",
  "serde_json",
@@ -536,6 +579,7 @@ version = "0.3.1"
 dependencies = [
  "backon",
  "chrono",
+ "clap",
  "colog",
  "config",
  "convert_case 0.8.0",
@@ -545,6 +589,7 @@ dependencies = [
  "humantime",
  "ipp",
  "log",
+ "ron 0.10.1",
  "rumqttc",
  "rustls-native-certs 0.8.1",
  "sentry",
@@ -1337,6 +1382,7 @@ dependencies = [
  "log",
  "num-traits",
  "reqwest",
+ "serde",
  "thiserror 2.0.12",
  "tokio-util",
 ]
@@ -1951,6 +1997,19 @@ dependencies = [
  "bitflags",
  "serde",
  "serde_derive",
+]
+
+[[package]]
+name = "ron"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "beceb6f7bf81c73e73aeef6dd1356d9a1b2b4909e1f0fc3e59b034f9572d7b7f"
+dependencies = [
+ "base64 0.22.1",
+ "bitflags",
+ "serde",
+ "serde_derive",
+ "unicode-ident",
 ]
 
 [[package]]

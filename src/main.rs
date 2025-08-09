@@ -1,5 +1,8 @@
+mod cli;
+
 use std::sync::OnceLock;
 
+use clap::Parser;
 use config::models::Settings;
 use backon::{ExponentialBuilder, Retryable};
 use convert_case::{Converter, pattern};
@@ -7,11 +10,12 @@ use cups_client::models::IppPrintQueueState;
 use dashmap::DashMap;
 use log::{debug, error, info};
 use mqtt_client::{client::MqttClient, models::*};
+use ron::ser::PrettyConfig;
 use snafu::{OptionExt, ResultExt, Snafu};
 use url::Url;
 use tokio::{sync::Mutex, task::JoinSet, time::sleep};
 
-use crate::cups_client::client::CupsError;
+use crate::{cli::{Cli, Commands}, cups_client::client::{get_raw_print_queues, CupsError}};
 
 mod cups_client;
 mod config;
@@ -45,15 +49,11 @@ async fn main() {
 
     colog::init();
 
-    info!("Starting cups2mqtt v{}", env!("CARGO_PKG_VERSION"));
-
-    let settings = get_settings();
-    info!("Running with config: {:#?}", settings);
-
-    let mut set = JoinSet::new();
-    set.spawn(print_queue_status_reporting_loop(settings));
-
-    while let Some(_cert) = set.join_next().await {};
+    let cli = Cli::parse();
+    match cli.command {
+        Some(Commands::Dump) => run_dump().await,
+        _ => run_service().await,
+    };
 }
 
 async fn failure_wait() {
@@ -121,6 +121,30 @@ async fn publish_cups_queue_statuses_and_log_result() -> Result<(), ApplicationE
             Err(e).with_whatever_context(|_| "Count not publish queue status")
         }
     }
+}
+
+// //////// //
+// Commands //
+// //////// //
+
+async fn run_dump() {
+    let settings = get_settings();
+    let cups_uri = cups_client::client::build_cups_url(&settings.cups, None).unwrap();
+
+    let ipp_result = get_raw_print_queues(cups_uri, settings.cups.ignore_tls_errors).await.unwrap();
+    print!("{}", ron::ser::to_string_pretty(&ipp_result, PrettyConfig::new()).unwrap());
+}
+
+async fn run_service() {
+    info!("Starting cups2mqtt v{}", env!("CARGO_PKG_VERSION"));
+
+    let settings = get_settings();
+    info!("Running with config: {:#?}", settings);
+
+    let mut set = JoinSet::new();
+    set.spawn(print_queue_status_reporting_loop(settings));
+
+    while let Some(_cert) = set.join_next().await {};
 }
 
 // ///// //

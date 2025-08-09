@@ -12,8 +12,12 @@ use super::models::{*};
 // Print queues //
 // //////////// //
 
+pub async fn get_raw_print_queues(uri: String, ignore_tls_errors: bool) -> Result<IppRequestResponse, CupsError> {
+    send_ipp_request(uri.clone(), ignore_tls_errors, Operation::CupsGetPrinters).await
+}
+
 pub async fn get_print_queues(uri: String, ignore_tls_errors: bool) -> Result<Vec<IppPrintQueueState>, CupsError> {
-    let resp = send_ipp_request(uri.clone(), ignore_tls_errors, Operation::CupsGetPrinters).await;
+    let resp = get_raw_print_queues(uri, ignore_tls_errors).await;
     let mut vec: Vec<IppPrintQueueState> = Vec::new();
 
     for printer in resp?.attributes().groups_of(DelimiterTag::PrinterAttributes) {
