@@ -68,7 +68,7 @@ async fn publish_cups_queue_statuses_and_log_result() -> Result<(), ApplicationE
 
     match &print_queues_result {
         Ok(print_queues) => {
-            debug!("Got print queues: {}", print_queues.len());
+            debug!("Got {} print queue(s)", print_queues.len());
 
             // Update the list of print queues used by the supply levels request loop. Start the loop if not already started.
             if settings.cups.report_supply_levels_schedule.is_some() {
@@ -88,7 +88,7 @@ async fn publish_cups_queue_statuses_and_log_result() -> Result<(), ApplicationE
             }
         },
         Err(e) => {
-            error!("Failed to get print queues (CUPS offline?): {}", e);
+            error!("Failed to get print queues: {}", e);
         }
     }
 
@@ -97,7 +97,7 @@ async fn publish_cups_queue_statuses_and_log_result() -> Result<(), ApplicationE
             debug!("Published server status");
         },
         Err(e) => {
-            error!("Failed to publish server status (MQTT offline?): {}", e);
+            error!("Failed to publish server status: {}", e);
             return Err(e);
         }
     }
@@ -111,14 +111,14 @@ async fn publish_cups_queue_statuses_and_log_result() -> Result<(), ApplicationE
                     Ok(())
                 },
                 Err(e) => {
-                    error!("Failed to publish queue statuses (MQTT offline?): {}", e);
+                    error!("Failed to publish queue statuses: {}", e);
                     Err(e)
                 }
             }
         },
         Err(e) => {
             // CUPS offline, publish server status only.
-            Err(e).with_whatever_context(|_| "Count not publish queue status due to CUPS error")
+            Err(e).with_whatever_context(|_| "Count not publish queue status")
         }
     }
 }
@@ -128,7 +128,9 @@ async fn publish_cups_queue_statuses_and_log_result() -> Result<(), ApplicationE
 // ///// //
 
 async fn print_queue_status_reporting_loop(settings: &Settings) {
+    info!("Queue status report loop started");
     loop {
+        debug!("Queue status report run started");
         let cups_print_queues = publish_cups_queue_statuses_and_log_result.retry(ExponentialBuilder::default().with_factor(4.0)).await;
             match cups_print_queues {
             Ok(_) => {
@@ -145,14 +147,15 @@ async fn print_queue_status_reporting_loop(settings: &Settings) {
 }
 
 async fn supply_levels_request_loop(settings: &Settings) {
+    info!("Supply levels update request loop started");
     loop {
-        debug!("Support levels loop run started");
+        debug!("Support levels update request run started");
         for print_queue in PRINT_QUEUES.get().unwrap().lock().await.iter() {
-            debug!("Querying support levels for queue {print_queue}");
+            debug!("Requesting supply levels update for queue [{print_queue}]");
             let print_queue_uri = cups_client::client::build_cups_url(&settings.cups, Some(print_queue)).unwrap();
             match cups_client::client::report_supply_levels(print_queue_uri, settings.cups.ignore_tls_errors).await {
-                Ok(_) => debug!("Successfully queried support levels for queue {print_queue}"),
-                Err(error) => debug!("Error while querying support levels for queue: {error}"),
+                Ok(_) => debug!("Successfully requested supply levels update for queue [{print_queue}]"),
+                Err(error) => error!("Error while requesting support levels update for queue [{print_queue}]: {error}"),
             }
         }
 

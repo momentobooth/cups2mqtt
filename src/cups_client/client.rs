@@ -1,7 +1,7 @@
 use std::{collections::HashMap, io::Cursor};
 
 use ipp::prelude::*;
-use snafu::{OptionExt, ResultExt, Snafu};
+use snafu::{whatever, OptionExt, ResultExt, Snafu};
 use url::Url;
 
 use crate::config::models::Cups;
@@ -74,21 +74,25 @@ pub async fn get_print_queues(uri: String, ignore_tls_errors: bool) -> Result<Ve
 // Printing and commands //
 // ///////////////////// //
 
-pub async fn report_supply_levels(uri: String, ignore_tls_errors: bool) -> Result<bool, CupsError> {
+pub async fn report_supply_levels(uri: String, ignore_tls_errors: bool) -> Result<(), CupsError> {
     let command = "#CUPS-COMMAND\nReportLevels";
     let command_bytes: Vec<u8> = command.as_bytes().to_vec();
-    Ok(print_job(uri, ignore_tls_errors, "CUPS2MQTT update supply levels".to_owned(), command_bytes).await?)
+    print_job(uri, ignore_tls_errors, "CUPS2MQTT update supply levels".to_owned(), command_bytes).await?;
+    Ok(())
 }
 
-pub async fn print_job(uri: String, ignore_tls_errors: bool, job_name: String, job_data: Vec<u8>) -> Result<bool, CupsError> {
+pub async fn print_job(uri: String, ignore_tls_errors: bool, job_name: String, job_data: Vec<u8>) -> Result<(), CupsError> {
     let uri_p: Uri = uri.parse::<Uri>().with_whatever_context(|_| format!("Could not parse URI {uri}"))?.clone();
     let pdf_data_cursor = Cursor::new(job_data);
     let pdf_data_payload = IppPayload::new(pdf_data_cursor);
     let print_job = IppOperationBuilder::print_job(uri_p.clone(), pdf_data_payload).job_title(job_name);
 
     let client = AsyncIppClient::builder(uri_p).ignore_tls_errors(ignore_tls_errors).build();
-    let resp = client.send(print_job.build()).await.with_whatever_context(|_| format!("Could not send print job"))?;
-    Ok(resp.header().status_code().is_success())
+    let resp = client.send(print_job.build()).await.with_whatever_context(|_| format!("IPP request failed"))?;
+    if !resp.header().status_code().is_success() {
+        whatever!("IPP request failed with status code [{}]", resp.header().status_code())
+    }
+    Ok(())
 }
 
 // /////// //
