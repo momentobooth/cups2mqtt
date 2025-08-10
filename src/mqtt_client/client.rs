@@ -1,4 +1,6 @@
-use rumqttc::{tokio_rustls::rustls::ClientConfig, AsyncClient, MqttOptions, QoS};
+use backon::{ExponentialBuilder, RetryableWithContext};
+use log::error;
+use rumqttc::{tokio_rustls::rustls::ClientConfig, AsyncClient, EventLoop, MqttOptions, QoS};
 use snafu::{ResultExt, Snafu};
 use tokio::task;
 use std::{sync::Arc, time::Duration};
@@ -34,7 +36,16 @@ impl MqttClient {
 
         task::spawn(async move {
             loop {
-                let _notification = eventloop.poll().await.unwrap();
+                let (eventloop_ret, _) = {
+                    |mut eventloop: EventLoop| async move {
+                        let result = eventloop.poll().await;
+                        if let Err(e) = &result {
+                            error!("Connection error during MQTT event loop: {e}; Backing off...");
+                        }
+                        (eventloop, result)
+                    }
+                }.retry(ExponentialBuilder::default().with_factor(4.0)).context(eventloop).await;
+                eventloop = eventloop_ret;
             }
         });
 
