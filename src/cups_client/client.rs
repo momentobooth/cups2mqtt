@@ -104,23 +104,25 @@ pub async fn print_job(uri: String, ignore_tls_errors: bool, job_name: String, j
 // /////// //
 
 fn get_ipp_strings(ipp_group: &HashMap<String, IppAttribute>, value_name: &str) -> Result<Vec<String>, CupsError> {
-    Ok(
-        ipp_group.get(value_name)
-            .with_whatever_context(|| format!("Value {value_name} not found in group"))?
-            .value().clone().as_array()
-            .with_whatever_context(|| format!("Could not read IPP value as array"))?
-            .iter().map(|f| f.to_string()).collect()
-    )
+    let value = ipp_group.get(value_name)
+        .with_whatever_context(|| format!("Value {value_name} not found in group"))?
+        .value();
+
+    Ok(match value {
+        IppValue::Array(value) => value.iter().map(|f| f.to_string()).collect(),
+        _ => vec![value.to_string()],
+    })
 }
 
 fn get_ipp_ints(ipp_group: &HashMap<String, IppAttribute>, value_name: &str) -> Result<Vec<i32>, CupsError> {
-    Ok(
-        ipp_group.get(value_name)
-            .with_whatever_context(|| format!("Value {value_name} not found in group"))?
-            .value().clone().as_array()
-            .with_whatever_context(|| format!("Could not read IPP value as array"))?
-            .iter().map(|f| f.as_integer().unwrap().to_owned()).collect()
-    )
+    let value = ipp_group.get(value_name)
+        .with_whatever_context(|| format!("Value {value_name} not found in group"))?
+        .value();
+
+    Ok(match value {
+        IppValue::Integer(value) => vec![*value],
+        _ => whatever!("Value {value} unsupported for {value_name}"),
+    })
 }
 
 pub fn build_cups_url(cups_settings: &Cups, queue_id: Option<&String>) -> Result<String, CupsError> {
