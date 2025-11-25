@@ -5,7 +5,7 @@ use std::sync::OnceLock;
 use clap::Parser;
 use config::models::Settings;
 use backon::{ExponentialBuilder, Retryable};
-use convert_case::{Converter, pattern};
+use convert_case::{Converter, Pattern};
 use cups_client::models::IppPrintQueueState;
 use dashmap::DashMap;
 use log::{debug, error, info};
@@ -273,7 +273,7 @@ async fn publish_cups_queue_statuses(print_queues: &Vec<IppPrintQueueState>) -> 
 
 async fn publish_ha_sensor_discovery_topic(queue: &IppPrintQueueState, integration_name: &str, topic_name_override: Option<&str>, name_override: Option<&str>) -> Result<(), ApplicationError> {
     let settings = get_settings();
-    let case_converter = Converter::new().set_pattern(pattern::sentence).set_delim(" ");
+    let case_converter = Converter::new().set_pattern(Pattern::Sentence).set_delim(" ");
     let sensor_topic = topic_name_override.unwrap_or(integration_name);
 
     let topic = format!("{}/sensor/{}_{}/{}/config", settings.mqtt.ha.discovery_topic_prefix, settings.mqtt.ha.component_id, queue.queue_name, sensor_topic);
