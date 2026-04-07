@@ -1,6 +1,6 @@
 use std::{collections::HashMap, io::Cursor};
 
-use ipp::prelude::*;
+use ipp::{prelude::*, value::BoundedString};
 use snafu::{whatever, OptionExt, ResultExt, Snafu};
 use url::Url;
 
@@ -89,10 +89,11 @@ pub async fn print_job(uri: String, ignore_tls_errors: bool, job_name: String, j
     let uri_p: Uri = uri.parse::<Uri>().with_whatever_context(|_| format!("Could not parse URI {uri}"))?.clone();
     let pdf_data_cursor = Cursor::new(job_data);
     let pdf_data_payload = IppPayload::new(pdf_data_cursor);
-    let print_job = IppOperationBuilder::print_job(uri_p.clone(), pdf_data_payload).job_title(job_name);
+    let print_job_builder = IppOperationBuilder::print_job(uri_p.clone(), pdf_data_payload).job_title(job_name);
+    let print_job = print_job_builder.build().with_whatever_context(|_| "Failed to build IPP print job")?;
 
     let client = AsyncIppClient::builder(uri_p).ignore_tls_errors(ignore_tls_errors).build();
-    let resp = client.send(print_job.build()).await.with_whatever_context(|_| format!("IPP request failed"))?;
+    let resp = client.send(print_job).await.with_whatever_context(|_| format!("IPP request failed"))?;
     if !resp.header().status_code().is_success() {
         whatever!("IPP request failed with status code [{}]", resp.header().status_code())
     }
@@ -103,7 +104,7 @@ pub async fn print_job(uri: String, ignore_tls_errors: bool, job_name: String, j
 // Helpers //
 // /////// //
 
-fn get_ipp_strings(ipp_group: &HashMap<String, IppAttribute>, value_name: &str) -> Result<Vec<String>, CupsError> {
+fn get_ipp_strings(ipp_group: &HashMap<BoundedString<255>, IppAttribute>, value_name: &str) -> Result<Vec<String>, CupsError> {
     let value = ipp_group.get(value_name)
         .with_whatever_context(|| format!("Value {value_name} not found in group"))?
         .value();
@@ -114,7 +115,7 @@ fn get_ipp_strings(ipp_group: &HashMap<String, IppAttribute>, value_name: &str) 
     })
 }
 
-fn get_ipp_ints(ipp_group: &HashMap<String, IppAttribute>, value_name: &str) -> Result<Vec<i32>, CupsError> {
+fn get_ipp_ints(ipp_group: &HashMap<BoundedString<255>, IppAttribute>, value_name: &str) -> Result<Vec<i32>, CupsError> {
     let value = ipp_group.get(value_name)
         .with_whatever_context(|| format!("Value {value_name} not found in group"))?
         .value();
@@ -158,7 +159,7 @@ async fn send_ipp_request(uri: String, ignore_tls_errors: bool, op: Operation) -
         IppVersion::v2_2(),
         op,
         Some(uri_p.clone())
-    );
+    ).with_whatever_context(|_| format!("Failed to build IPP request"))?;
 
     // If we ever want to specify which attributes we want to receive.
     // req.attributes_mut().groups_mut().first_mut().unwrap().attributes_mut().insert("requested-attributes".to_owned(), IppAttribute::new(IppAttribute::REQUESTED_ATTRIBUTES, IppValue::Array(vec![
