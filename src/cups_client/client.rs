@@ -1,6 +1,6 @@
-use std::{collections::HashMap, io::Cursor};
+use std::io::Cursor;
 
-use ipp::{prelude::*, value::BoundedString};
+use ipp::prelude::*;
 use snafu::{whatever, OptionExt, ResultExt, Snafu};
 use url::Url;
 
@@ -21,27 +21,25 @@ pub async fn get_print_queues(uri: String, ignore_tls_errors: bool) -> Result<Ve
     let mut vec: Vec<IppPrintQueueState> = Vec::new();
 
     for printer in resp?.attributes().groups_of(DelimiterTag::PrinterAttributes) {
-        let group = printer.attributes().clone();
-        let state = group["printer-state"]
-            .value()
+        let state = get_ipp_value(printer, "printer-state")?
             .as_enum()
             .and_then(|v| PrinterState::from_i32(*v)).with_whatever_context(|| "Failed to parse printer state")?;
-        let job_count = group["queued-job-count"].value().as_integer().with_whatever_context(|| "Failed to parse job count")?.clone();
-        let state_message = group["printer-state-message"].value().to_string().clone();
-        let queue_name = group["printer-name"].value().to_string().clone();
-        let description = group["printer-info"].value().to_string().clone();
-        let printer_make = group["printer-make-and-model"].value().to_string().clone();
-        let state_reason = group["printer-state-reasons"].value().to_string().clone();
-        let cups_version = group["cups-version"].value().to_string().clone();
+        let job_count = get_ipp_value(printer, "queued-job-count")?.as_integer().with_whatever_context(|| "Failed to parse job count")?.clone();
+        let state_message = get_ipp_value(printer, "printer-state-message")?.to_string();
+        let queue_name = get_ipp_value(printer, "printer-name")?.to_string();
+        let description = get_ipp_value(printer, "printer-info")?.to_string();
+        let printer_make = get_ipp_value(printer, "printer-make-and-model")?.to_string();
+        let state_reason = get_ipp_value(printer, "printer-state-reasons")?.to_string();
+        let cups_version = get_ipp_value(printer, "cups-version")?.to_string();
 
         let mut markers = Vec::<IppPrinterMarker>::new();
 
-        // Here use `.get` instead of the index to avoid a crash, as
-        // these values are not always available for various reasons.
-        let marker_types = get_ipp_strings(&group, "marker-types");
-        let marker_colors = get_ipp_strings(&group, "marker-colors");
-        let marker_names = get_ipp_strings(&group, "marker-names");
-        let marker_levels = get_ipp_ints(&group, "marker-levels");
+        // Here missing values are tolerated instead of failing the whole
+        // update, as these values are not always available for various reasons.
+        let marker_types = get_ipp_strings(printer, "marker-types");
+        let marker_colors = get_ipp_strings(printer, "marker-colors");
+        let marker_names = get_ipp_strings(printer, "marker-names");
+        let marker_levels = get_ipp_ints(printer, "marker-levels");
 
         if marker_types.is_ok() && marker_colors.is_ok() && marker_names.is_ok() && marker_levels.is_ok() {
             let marker_types = marker_types.unwrap();
@@ -104,10 +102,14 @@ pub async fn print_job(uri: String, ignore_tls_errors: bool, job_name: String, j
 // Helpers //
 // /////// //
 
-fn get_ipp_strings(ipp_group: &HashMap<BoundedString<255>, IppAttribute>, value_name: &str) -> Result<Vec<String>, CupsError> {
-    let value = ipp_group.get(value_name)
+fn get_ipp_value<'a>(ipp_group: &'a IppAttributeGroup, value_name: &str) -> Result<&'a IppValue, CupsError> {
+    Ok(ipp_group.get(value_name)
         .with_whatever_context(|| format!("Value {value_name} not found in group"))?
-        .value();
+        .value())
+}
+
+fn get_ipp_strings(ipp_group: &IppAttributeGroup, value_name: &str) -> Result<Vec<String>, CupsError> {
+    let value = get_ipp_value(ipp_group, value_name)?;
 
     Ok(match value {
         IppValue::Array(value) => value.iter().map(|f| f.to_string()).collect(),
@@ -115,10 +117,8 @@ fn get_ipp_strings(ipp_group: &HashMap<BoundedString<255>, IppAttribute>, value_
     })
 }
 
-fn get_ipp_ints(ipp_group: &HashMap<BoundedString<255>, IppAttribute>, value_name: &str) -> Result<Vec<i32>, CupsError> {
-    let value = ipp_group.get(value_name)
-        .with_whatever_context(|| format!("Value {value_name} not found in group"))?
-        .value();
+fn get_ipp_ints(ipp_group: &IppAttributeGroup, value_name: &str) -> Result<Vec<i32>, CupsError> {
+    let value = get_ipp_value(ipp_group, value_name)?;
 
     Ok(match value {
         IppValue::Integer(value) => vec![*value],
