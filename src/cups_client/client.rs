@@ -29,7 +29,7 @@ pub async fn get_print_queues(uri: String, ignore_tls_errors: bool) -> Result<Ve
         let queue_name = get_ipp_value(printer, "printer-name")?.to_string();
         let description = get_ipp_value(printer, "printer-info")?.to_string();
         let printer_make = get_ipp_value(printer, "printer-make-and-model")?.to_string();
-        let state_reason = get_ipp_value(printer, "printer-state-reasons")?.to_string();
+        let state_reason = get_ipp_strings(printer, "printer-state-reasons")?.join(",");
         let cups_version = get_ipp_value(printer, "cups-version")?.to_string();
 
         let mut markers = Vec::<IppPrinterMarker>::new();
@@ -120,10 +120,17 @@ fn get_ipp_strings(ipp_group: &IppAttributeGroup, value_name: &str) -> Result<Ve
 fn get_ipp_ints(ipp_group: &IppAttributeGroup, value_name: &str) -> Result<Vec<i32>, CupsError> {
     let value = get_ipp_value(ipp_group, value_name)?;
 
-    Ok(match value {
-        IppValue::Integer(value) => vec![*value],
-        _ => whatever!("Value {value} unsupported for {value_name}"),
-    })
+    match value {
+        IppValue::Array(values) => values.iter().map(|v| get_ipp_int(v, value_name)).collect(),
+        _ => Ok(vec![get_ipp_int(value, value_name)?]),
+    }
+}
+
+fn get_ipp_int(value: &IppValue, value_name: &str) -> Result<i32, CupsError> {
+    match value.as_integer() {
+        Some(value) => Ok(*value),
+        None => whatever!("Value {value} unsupported for {value_name}"),
+    }
 }
 
 pub fn build_cups_url(cups_settings: &Cups, queue_id: Option<&String>) -> Result<String, CupsError> {
