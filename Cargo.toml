@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 clap = { version = "4.6.7", features = ["derive"] }
-ipp = { version = "7.0.0", features = ["async-client-tls", "serde"]}
+ipp = { version = "8.0.0", features = ["async-client-tls", "serde"]}
 rumqttc = "0.25.1"
 serde = "1.0.229"
 serde_derive = "1.0.229"
